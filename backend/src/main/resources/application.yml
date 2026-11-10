@@ -17,6 +17,16 @@ spring:
 server:
   port: ${API_PORT:8080}
 
+clinicready:
+  security:
+    jwt:
+      # Required, at least 32 bytes. The API does not start without it.
+      secret: ${JWT_SECRET:}
+      ttl: ${JWT_TTL:8h}
+      issuer: clinicready
+      # Browsers accept Secure cookies on http://localhost, so this stays true in development.
+      cookie-secure: ${JWT_COOKIE_SECURE:true}
+
 management:
   endpoints:
     web:
