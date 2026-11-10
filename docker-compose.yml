@@ -16,7 +16,16 @@ services:
       retries: 10
 
   # api:  added in YOS-8 (Spring Boot skeleton)
-  # web:  added in YOS-9 (React skeleton)
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    # Enable once the `api` service exists (YOS-8). nginx proxies /api/ to http://api:8080
+    # (see frontend/nginx.conf) and starts fine even while the API is down.
+    # depends_on:
+    #   - api
 
 volumes:
   pgdata:
