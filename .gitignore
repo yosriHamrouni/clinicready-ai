@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# Java / Maven / Gradle
+backend/target/
+backend/build/
+backend/.gradle/
+*.class
+*.log
+hs_err_pid*
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local storage for uploaded documents
+storage/
+uploads/
+
+# Test reports
+**/test-results/
+**/playwright-report/
