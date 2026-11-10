@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: clinicready-api
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${POSTGRES_DB:clinicready}
+    username: ${POSTGRES_USER:clinicready}
+    password: ${POSTGRES_PASSWORD:change-me}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Schema is owned by Flyway. Never use ddl-auto=update.
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${API_PORT:8080}
+
+clinicready:
+  security:
+    jwt:
+      # Required, at least 32 bytes. The API does not start without it.
+      secret: ${JWT_SECRET:}
+      ttl: ${JWT_TTL:8h}
+      issuer: clinicready
+      # Browsers accept Secure cookies on http://localhost, so this stays true in development.
+      cookie-secure: ${JWT_COOKIE_SECURE:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

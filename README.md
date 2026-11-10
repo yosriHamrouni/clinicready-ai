@@ -58,11 +58,17 @@ eval/       Evaluation test set and expected outcomes
 
 ## Getting started
 
-> The backend and frontend are scaffolded in M1 (YOS-8, YOS-9). For now only the database runs.
+Requires Docker.
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
+docker compose up --build
+```
+
+The frontend is served on http://localhost:3000. The API starts on http://localhost:8080 and runs Flyway migrations on startup. Check it with:
+
+```bash
+curl http://localhost:8080/actuator/health
 ```
 
 ## Roadmap
