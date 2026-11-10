@@ -35,6 +35,10 @@ public class AppUser {
     @Column(nullable = false)
     private boolean enabled;
 
+    /** Set when the user is a practitioner of the clinic. */
+    @Column(name = "practitioner_id")
+    private UUID practitionerId;
+
     protected AppUser() {
     }
 
@@ -64,5 +68,9 @@ public class AppUser {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public UUID getPractitionerId() {
+        return practitionerId;
     }
 }
