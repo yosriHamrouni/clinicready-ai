@@ -29,7 +29,14 @@ services:
       postgres:
         condition: service_healthy
 
-  # web:  added in YOS-9 (React skeleton)
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    # nginx proxies /api/ to http://api:8080 (see frontend/nginx.conf).
+    depends_on:
+      - api
 
 volumes:
   pgdata:

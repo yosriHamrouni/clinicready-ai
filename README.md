@@ -58,14 +58,14 @@ eval/       Evaluation test set and expected outcomes
 
 ## Getting started
 
-Requires Docker. The frontend is scaffolded in YOS-9.
+Requires Docker.
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-The API starts on http://localhost:8080 and runs Flyway migrations on startup. Check it with:
+The frontend is served on http://localhost:3000. The API starts on http://localhost:8080 and runs Flyway migrations on startup. Check it with:
 
 ```bash
 curl http://localhost:8080/actuator/health
