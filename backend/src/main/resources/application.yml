@@ -5,6 +5,11 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${POSTGRES_DB:clinicready}
     username: ${POSTGRES_USER:clinicready}
     password: ${POSTGRES_PASSWORD:change-me}
+  servlet:
+    multipart:
+      # One knob: clinicready.documents.max-size. The request limit leaves room for the other fields.
+      max-file-size: ${clinicready.documents.max-size}
+      max-request-size: ${DOCUMENTS_MAX_REQUEST_SIZE:12MB}
   jpa:
     open-in-view: false
     hibernate:
@@ -26,6 +31,11 @@ clinicready:
       issuer: clinicready
       # Browsers accept Secure cookies on http://localhost, so this stays true in development.
       cookie-secure: ${JWT_COOKIE_SECURE:true}
+
+  documents:
+    # Directory for uploaded files (a volume in Docker). Files are never stored in the database.
+    storage-path: ${DOCUMENTS_STORAGE_PATH:./storage/documents}
+    max-size: ${DOCUMENTS_MAX_SIZE:10MB}
 
 management:
   endpoints:
