@@ -8,7 +8,7 @@ Work is tracked in Linear (project **ClinicReady AI**, team key `YOS`).
 2. Create a branch from `main` named after the issue: `yos-23-readiness-engine` (Linear's "copy git branch name" works).
 3. Keep pull requests small (aim for under ~400 changed lines).
 4. Put `Fixes YOS-23` in the PR description so Linear closes the issue on merge.
-5. CI must be green and the other person must approve. Squash-merge.
+5. CI must be green (the required `CI` check: backend `./mvnw verify` with Testcontainers, frontend lint, typecheck, tests and build) and the other person must approve. Squash-merge.
 
 ## Definition of done
 
