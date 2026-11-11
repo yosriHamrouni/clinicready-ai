@@ -1,5 +1,6 @@
 package com.clinicready.security;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.security.core.Authentication;
@@ -25,6 +26,11 @@ public class CurrentUserService {
 
     public Role role() {
         return Role.valueOf(jwt().getClaimAsString(JwtService.CLAIM_ROLE));
+    }
+
+    /** The practitioner this user is, if any. Only set for users linked to a practitioner. */
+    public Optional<UUID> practitionerId() {
+        return Optional.ofNullable(jwt().getClaimAsString(JwtService.CLAIM_PRACTITIONER_ID)).map(UUID::fromString);
     }
 
     private Jwt jwt() {
