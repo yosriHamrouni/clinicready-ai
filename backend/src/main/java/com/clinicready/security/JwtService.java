@@ -16,6 +16,7 @@ class JwtService {
 
     static final String CLAIM_CLINIC_ID = "clinicId";
     static final String CLAIM_ROLE = "role";
+    static final String CLAIM_PRACTITIONER_ID = "practitionerId";
 
     private final JwtEncoder encoder;
     private final JwtProperties properties;
@@ -29,16 +30,18 @@ class JwtService {
 
     IssuedToken issue(AppUser user) {
         Instant now = clock.instant();
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(properties.issuer())
                 .subject(user.getId().toString())
                 .issuedAt(now)
                 .expiresAt(now.plus(properties.ttl()))
                 .claim(CLAIM_CLINIC_ID, user.getClinicId().toString())
-                .claim(CLAIM_ROLE, user.getRole().name())
-                .build();
+                .claim(CLAIM_ROLE, user.getRole().name());
+        if (user.getPractitionerId() != null) {
+            claims.claim(CLAIM_PRACTITIONER_ID, user.getPractitionerId().toString());
+        }
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
-        String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
+        String token = encoder.encode(JwtEncoderParameters.from(header, claims.build())).getTokenValue();
         return new IssuedToken(token, properties.ttl().toSeconds());
     }
 

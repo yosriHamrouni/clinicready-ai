@@ -26,6 +26,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
@@ -60,6 +61,9 @@ class AuthIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JwtDecoder jwtDecoder;
 
     @BeforeEach
     void seedUsers() {
@@ -212,6 +216,24 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void practitionerTokenCarriesPractitionerIdAndOthersDoNot() throws Exception {
+        UUID practitionerId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        jdbc.update("INSERT INTO practitioner (id, clinic_id, full_name) VALUES (?, ?, 'Dr Test') ON CONFLICT DO NOTHING",
+                practitionerId, CLINIC_ID);
+        jdbc.update("""
+                INSERT INTO app_user (id, clinic_id, email, password_hash, full_name, role, enabled, practitioner_id)
+                VALUES (?, ?, 'doctor@auth-test.test', ?, 'Dr Test', 'PRACTITIONER', TRUE, ?) ON CONFLICT DO NOTHING
+                """, UUID.fromString("55555555-5555-5555-5555-555555555555"), CLINIC_ID,
+                passwordEncoder.encode(PASSWORD), practitionerId);
+
+        String doctorToken = tokenFrom(mvc.perform(login("doctor@auth-test.test", PASSWORD)).andReturn());
+
+        assertThat(jwtDecoder.decode(doctorToken).getClaimAsString("practitionerId"))
+                .isEqualTo(practitionerId.toString());
+        assertThat(jwtDecoder.decode(loginAndGetToken()).hasClaim("practitionerId")).isFalse();
+    }
+
+    @Test
     void passwordsAreStoredWithBcrypt() {
         String stored = jdbc.queryForObject("SELECT password_hash FROM app_user WHERE id = ?", String.class, USER_ID);
 
@@ -227,7 +249,10 @@ class AuthIntegrationTest {
     }
 
     private String loginAndGetToken() throws Exception {
-        MvcResult result = mvc.perform(login(EMAIL, PASSWORD)).andExpect(status().isOk()).andReturn();
+        return tokenFrom(mvc.perform(login(EMAIL, PASSWORD)).andExpect(status().isOk()).andReturn());
+    }
+
+    private String tokenFrom(MvcResult result) throws Exception {
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
         return body.get("accessToken").asText();
     }
