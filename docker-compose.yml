@@ -26,8 +26,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (see .env.example)}
       # Seeds synthetic login users (backend/src/main/resources/db/seed-dev).
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DOCUMENTS_MAX_SIZE: ${DOCUMENTS_MAX_SIZE:-10MB}
     ports:
       - "${API_PORT:-8080}:8080"
+    volumes:
+      # Uploaded patient documents (outside the database).
+      - documents:/data/documents
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,3 +47,4 @@ services:
 
 volumes:
   pgdata:
+  documents:

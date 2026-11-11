@@ -31,7 +31,7 @@ class TenantSchemaTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"app_user", "practitioner", "patient", "appointment_type", "appointment"})
+    @ValueSource(strings = {"app_user", "practitioner", "patient", "appointment_type", "appointment", "document"})
     void tenantOwnedTableHasRequiredClinicIdWithForeignKeyAndIndex(String table) {
         String nullable = jdbc.queryForObject("""
                 SELECT is_nullable FROM information_schema.columns
