@@ -65,11 +65,12 @@ public class DocumentService {
     private final DocumentMetadataRepository metadata;
     private final AuditService audit;
     private final UserDirectory userDirectory;
+    private final DocumentExtractionRepository extractions;
 
     DocumentService(DocumentRepository documents, DocumentStorage storage, DocumentProperties properties,
             PatientService patients, CurrentUserService currentUser, AuthorizationService authorization,
             DocumentTextRepository texts, ApplicationEventPublisher events, DocumentMetadataRepository metadata,
-            AuditService audit, UserDirectory userDirectory) {
+            AuditService audit, UserDirectory userDirectory, DocumentExtractionRepository extractions) {
         this.documents = documents;
         this.storage = storage;
         this.properties = properties;
@@ -81,6 +82,7 @@ public class DocumentService {
         this.metadata = metadata;
         this.audit = audit;
         this.userDirectory = userDirectory;
+        this.extractions = extractions;
     }
 
     /**
@@ -154,6 +156,17 @@ public class DocumentService {
         Document document = get(id);
         return texts.findByDocumentIdAndClinicId(document.getId(), document.getClinicId())
                 .map(t -> new ExtractedText(t.getContent(), t.getPageCount(), t.isTruncated()));
+    }
+
+    /**
+     * What the model observed about the document (category, date, issuer, confidence, model), after the
+     * same checks as {@link #get}. Empty while classification is pending or when no model is configured.
+     * An observation only: it never decides readiness, and staff corrections are kept in {@link #metadata}.
+     */
+    @Transactional(readOnly = true)
+    public Optional<DocumentExtraction> aiExtraction(UUID id) {
+        Document document = get(id);
+        return extractions.findByDocumentIdAndClinicId(document.getId(), document.getClinicId());
     }
 
     /** The document's corrected fields after the same checks as {@link #get}; empty if never edited. */

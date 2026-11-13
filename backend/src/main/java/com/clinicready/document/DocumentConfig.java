@@ -8,7 +8,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 @Configuration
 @EnableScheduling
-@EnableConfigurationProperties(DocumentProperties.class)
+@EnableConfigurationProperties({ DocumentProperties.class, ClassificationProperties.class })
 class DocumentConfig {
 
     static final String EXTRACTION_EXECUTOR = "documentExtractionExecutor";

@@ -51,4 +51,19 @@ interface DocumentRepository extends JpaRepository<Document, UUID> {
                                 extracted_at = :at
             WHERE id = :id AND extraction_status = 'PENDING'""")
     int markExtractionFailed(UUID id, String failure, Instant at);
+
+    /** Ids of documents whose text was read at least {@code before} ago but that have no observation yet. */
+    @Query("""
+            SELECT d.id FROM Document d
+            WHERE d.extractionStatus = com.clinicready.document.ExtractionStatus.EXTRACTED
+              AND d.extractedAt < :before
+              AND NOT EXISTS (SELECT 1 FROM DocumentExtraction e WHERE e.documentId = d.id)
+            ORDER BY d.extractedAt""")
+    List<UUID> findAwaitingClassification(Instant before, Limit limit);
+
+    /** Flags a freshly uploaded document for human review. Leaves any later review decision untouched. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(nativeQuery = true, value = """
+            UPDATE document SET status = 'NEEDS_REVIEW' WHERE id = :id AND status = 'UPLOADED'""")
+    int markNeedsReview(UUID id);
 }

@@ -127,6 +127,22 @@ A failed extraction is **not** a missing document: the document exists, the syst
 
 Only the first 100 pages and 200 000 characters are kept. A document left `PENDING` (for example after a restart) is picked up again at startup and by a sweep every 5 minutes.
 
+## AI metadata extraction
+
+Once a document's text is extracted, a language model (Spring AI, Anthropic) is asked for three **documentary observations**: `category`, `documentDate` and `issuer`, plus its own `confidence` (0..1). The result is stored in `document_extraction`, one row per document, with the model name and the document id as the source reference. It is read server side with `DocumentService.aiExtraction(id)`; no endpoint exposes it yet.
+
+The model's answer must be one JSON object that validates against `backend/src/main/resources/extraction/document-extraction.schema.json` (exactly the four keys, `category` from the category list above, date as a real `YYYY-MM-DD`, confidence in 0..1). Anything else is stored as `FAILED` / `INVALID_OUTPUT`; a failed model call as `FAILED` / `MODEL_ERROR`. Values are never repaired or guessed: `null` means "could not be identified".
+
+| `reviewReason` | When | Effect |
+| --- | --- | --- |
+| `EXTRACTION_FAILED` | Invalid output or model error | Document `status` becomes `NEEDS_REVIEW` |
+| `CATEGORY_UNKNOWN` | The model could not tell the category | same |
+| `LOW_CONFIDENCE` | `confidence` below `DOCUMENTS_MIN_CONFIDENCE` (default `0.7`) | same |
+
+Boundaries: these are observations only. They do not decide CNAM eligibility or coverage, authenticity, medical relevance or completeness, the advance amount, or whether payment is confirmed. A failed or flagged extraction is never a *missing* document, and observations are kept apart from staff corrections (`document_metadata`) and from the readiness engine's decision. Each observation points to its source document, so any decision that uses it can be traced back.
+
+Without a model configured (`AI_CHAT_PROVIDER` unset or `none`), documents stay unclassified and nothing is flagged. Document text is sent to the configured provider (at most `clinicready.documents.classification.max-prompt-chars`, default 12 000); never use real patient documents with a provider you have not approved. Text, prompts and answers are never logged.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -138,3 +154,7 @@ Only the first 100 pages and 200 000 characters are kept. A document left `PENDI
 | `clinicready.documents.extraction.max-pages` | `100` | Pages read per PDF. |
 | `clinicready.documents.extraction.max-chars` | `200000` | Characters stored per document. |
 | `clinicready.documents.extraction.sweep-interval` | `PT5M` | How often documents stuck in `PENDING` are re-queued. |
+| `AI_CHAT_PROVIDER` | `none` | Set to `anthropic` to enable AI extraction (also needs `ANTHROPIC_API_KEY`). |
+| `ANTHROPIC_API_KEY` | empty | Provider key; never commit it. |
+| `AI_EXTRACTION_MODEL` | `claude-haiku-5-5` | Model used for extraction. |
+| `DOCUMENTS_MIN_CONFIDENCE` | `0.7` | Below this an observation is flagged for review. |
