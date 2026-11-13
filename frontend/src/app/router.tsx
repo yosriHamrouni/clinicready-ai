@@ -6,6 +6,7 @@ import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { PatientsPage } from '../features/patients/PatientsPage';
 import { AgentWorkspacePage } from '../features/agent/AgentWorkspacePage';
 import { FollowUpsPage } from '../features/followups/FollowUpsPage';
+import { RequirementRulesPage } from '../features/settings/RequirementRulesPage';
 import { NotFoundPage } from '../features/NotFoundPage';
 
 export const routes: RouteObject[] = [
@@ -21,6 +22,7 @@ export const routes: RouteObject[] = [
           { path: '/patients', element: <PatientsPage /> },
           { path: '/agent', element: <AgentWorkspacePage /> },
           { path: '/follow-ups', element: <FollowUpsPage /> },
+          { path: '/settings/requirements', element: <RequirementRulesPage /> },
         ],
       },
     ],
