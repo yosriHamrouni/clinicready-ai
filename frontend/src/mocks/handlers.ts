@@ -5,9 +5,12 @@ import type {
   Appointment,
   AppointmentType,
   CurrentUser,
+  DocumentMetadata,
   NewAppointmentInput,
   NewPatientInput,
+  MetadataPatch,
   Patient,
+  PatientDocument,
   Practitioner,
   RequirementRule,
   RequirementRuleInput,
@@ -151,10 +154,52 @@ const initialAppointments = (): Appointment[] => [
 
 let appointments = initialAppointments();
 
-/** Restores the mock patients and appointments (tests). */
+const initialDocuments = (): PatientDocument[] => [
+  {
+    id: 'doc-001',
+    patientId: 'patient-001',
+    category: 'PRESCRIPTION',
+    source: 'STAFF_UPLOAD',
+    status: 'NEEDS_REVIEW',
+    version: 2,
+    originalFilename: 'ordonnance.pdf',
+    contentType: 'application/pdf',
+    sizeBytes: 48213,
+    uploadedAt: '2026-11-10T09:30:00Z',
+    extractionStatus: 'EXTRACTED',
+  },
+  {
+    id: 'doc-002',
+    patientId: 'patient-001',
+    category: 'ID_DOCUMENT',
+    source: 'SCAN',
+    status: 'UPLOADED',
+    version: 1,
+    originalFilename: 'cin.png',
+    contentType: 'image/png',
+    sizeBytes: 20311,
+    uploadedAt: '2026-11-09T14:00:00Z',
+    extractionStatus: 'EXTRACTION_FAILED',
+  },
+];
+
+const emptyMetadata = (documentId: string): DocumentMetadata => ({
+  documentId,
+  fields: {},
+  updatedBy: null,
+  updatedByName: null,
+  updatedAt: null,
+});
+
+let documents = initialDocuments();
+let documentMetadata = new Map<string, DocumentMetadata>();
+
+/** Restores the mock patients, appointments and documents (tests). */
 export function resetMockClinicData(): void {
   patients = initialPatients();
   appointments = initialAppointments();
+  documents = initialDocuments();
+  documentMetadata = new Map();
 }
 
 function sameContact(a: AdminDetails['trustedContact'], b: AdminDetailsInput['trustedContact']) {
@@ -310,6 +355,37 @@ export const handlers = [
     };
     patients.push(patient);
     return HttpResponse.json(patient, { status: 201 });
+  }),
+
+  http.get('*/patients/:id/documents', ({ params }) =>
+    HttpResponse.json(documents.filter((d) => d.patientId === params.id)),
+  ),
+
+  http.get('*/documents/:id/metadata', ({ params }) => {
+    const id = String(params.id);
+    if (!documents.some((d) => d.id === id)) return notFound();
+    return HttpResponse.json(documentMetadata.get(id) ?? emptyMetadata(id));
+  }),
+
+  http.patch('*/documents/:id/metadata', async ({ params, request }) => {
+    const id = String(params.id);
+    if (!documents.some((d) => d.id === id)) return notFound();
+    const body = (await request.json()) as MetadataPatch;
+    const fields = { ...(documentMetadata.get(id)?.fields ?? {}) };
+    for (const [key, value] of Object.entries(body.fields)) {
+      const trimmed = value?.trim();
+      if (trimmed) fields[key as keyof typeof fields] = trimmed;
+      else delete fields[key as keyof typeof fields];
+    }
+    const updated: DocumentMetadata = {
+      documentId: id,
+      fields,
+      updatedBy: MOCK_USER.id,
+      updatedByName: MOCK_USER.fullName,
+      updatedAt: new Date().toISOString(),
+    };
+    documentMetadata.set(id, updated);
+    return HttpResponse.json(updated);
   }),
 
   http.get('*/practitioners', () => HttpResponse.json(MOCK_PRACTITIONERS)),

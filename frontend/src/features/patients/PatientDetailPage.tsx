@@ -15,6 +15,7 @@ import { formatDateTime, startOfDay } from '../../lib/dates';
 import { strings } from '../../lib/strings';
 import { AppointmentStatusBadge } from '../appointments/badges';
 import { NewAppointmentForm } from '../appointments/NewAppointmentForm';
+import { PatientDocuments } from './PatientDocuments';
 
 const t = strings.patients;
 
@@ -122,6 +123,7 @@ function PatientDetail({ patient }: { patient: Patient }) {
           )}
         </CardContent>
       </Card>
+      <PatientDocuments patientId={patient.id} />
     </>
   );
 }

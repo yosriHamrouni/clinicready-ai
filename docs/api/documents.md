@@ -81,6 +81,36 @@ A document or patient of another clinic, or one the user may not see, is reporte
 
 The browser sends the session cookie automatically, so `<img src>` / `<iframe src>` pointing at this URL work; the URL cannot be shared with someone who is not logged in.
 
+## `GET /documents/{id}/metadata`
+
+`200 OK`: the fields read from the document, as corrected by staff. `fields` is empty and `updatedBy`, `updatedByName`, `updatedAt` are `null` until someone saves a field.
+
+```json
+{
+  "documentId": "5d0a3f0e-…",
+  "fields": { "expiryDate": "2027-03-01", "issuer": "CNAM" },
+  "updatedBy": "6f1c…",
+  "updatedByName": "Sarra Test",
+  "updatedAt": "2026-11-13T19:24:04.949Z"
+}
+```
+
+Field names: `documentDate`, `expiryDate` (ISO dates, `YYYY-MM-DD`), `issuer`, `documentNumber`, `holderName` (text, at most 200 characters). A field that is absent is not set.
+
+## `PATCH /documents/{id}/metadata`
+
+Corrects fields. Body: `{ "fields": { "issuer": "CNAM", "expiryDate": null } }`. Only the listed fields change; a `null` or blank value clears the field; values are trimmed. Returns the updated metadata (same shape as `GET`).
+
+The editor (`updatedBy`) and the time (`updatedAt`) are saved with every change that alters a field. Re-sending the current values changes nothing: editor and time stay as they were. Each change is also written to the audit log (`DOCUMENT_METADATA_UPDATED`) with the names of the changed fields, never their values.
+
+Allowed for receptionists, clinic managers and practitioners (practitioners only for documents of their own patients). All five fields are administrative, so none is withheld from practitioners.
+
+| Status | `code` | When |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Missing `fields`, unknown field name, value over 200 characters, or a date that is not a real `YYYY-MM-DD` date. Nothing is saved. |
+| 401 | `UNAUTHENTICATED` | No or invalid token. |
+| 404 | `NOT_FOUND` | Document does not exist, belongs to another clinic, or is not visible to the user. |
+
 ## Text extraction
 
 After an upload commits, the text of the file is extracted in the background (PDFBox). Poll `GET /documents/{id}` to see the result; it usually takes well under a second.

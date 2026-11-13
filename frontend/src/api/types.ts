@@ -166,3 +166,47 @@ export interface ApiErrorBody {
   message?: string;
   details?: unknown;
 }
+
+export type DocumentSource = 'STAFF_UPLOAD' | 'EMAIL' | 'SCAN' | 'PATIENT_SUBMISSION';
+export type DocumentStatus = 'UPLOADED' | 'NEEDS_REVIEW' | 'VERIFIED' | 'REJECTED';
+export type ExtractionStatus = 'PENDING' | 'EXTRACTED' | 'EXTRACTION_FAILED';
+
+/** An uploaded file of a patient (metadata only; the bytes come from GET /documents/{id}/content). */
+export interface PatientDocument {
+  id: string;
+  patientId: string;
+  category: DocumentCategory;
+  source: DocumentSource;
+  status: DocumentStatus;
+  version: number;
+  originalFilename: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  extractionStatus: ExtractionStatus;
+}
+
+/** Editable fields of a document, as named by the API. */
+export const METADATA_FIELDS = [
+  'documentDate',
+  'expiryDate',
+  'issuer',
+  'documentNumber',
+  'holderName',
+] as const;
+export type MetadataFieldKey = (typeof METADATA_FIELDS)[number];
+export type MetadataFields = Partial<Record<MetadataFieldKey, string>>;
+
+/** GET/PATCH /documents/{id}/metadata. The editor is null until someone saves a field. */
+export interface DocumentMetadata {
+  documentId: string;
+  fields: MetadataFields;
+  updatedBy: string | null;
+  updatedByName: string | null;
+  updatedAt: string | null;
+}
+
+/** Body of PATCH /documents/{id}/metadata: an empty string or null clears a field. */
+export interface MetadataPatch {
+  fields: Partial<Record<MetadataFieldKey, string | null>>;
+}
