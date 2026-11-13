@@ -1,5 +1,6 @@
 package com.clinicready.appointment;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,4 +14,6 @@ interface AppointmentTypeRepository extends JpaRepository<AppointmentType, UUID>
     Optional<AppointmentType> findByClinicIdAndCode(UUID clinicId, String code);
 
     List<AppointmentType> findAllByClinicIdOrderByCode(UUID clinicId);
+
+    List<AppointmentType> findAllByClinicIdAndIdIn(UUID clinicId, Collection<UUID> ids);
 }
