@@ -76,6 +76,21 @@ public class AppointmentService {
                 appointment.appointmentTypeId(), appointment.startsAt()));
     }
 
+    /** The clinic's appointment types, by code. */
+    @Transactional(readOnly = true)
+    public List<AppointmentType> listTypes() {
+        authorization.require(Permission.APPOINTMENT_READ);
+        return types.findAllByClinicIdOrderByCode(currentUser.clinicId());
+    }
+
+    /** @throws NotFoundException if the type is in another clinic */
+    @Transactional(readOnly = true)
+    public AppointmentType getType(UUID id) {
+        authorization.require(Permission.APPOINTMENT_READ);
+        return types.findByIdAndClinicId(id, currentUser.clinicId())
+                .orElseThrow(() -> new NotFoundException("Appointment type"));
+    }
+
     private boolean visibleToCurrentUser(Appointment appointment) {
         if (!isPractitioner()) {
             return true;

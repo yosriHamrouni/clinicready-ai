@@ -1,4 +1,4 @@
-import type { Role } from '../api/types';
+import type { DocumentCategory, Role } from '../api/types';
 
 /** All UI strings (French), centralized for review and future i18n. */
 export const strings = {
@@ -18,6 +18,7 @@ export const strings = {
     patients: 'Patients',
     agent: 'Espace agent',
     followUps: 'Suivis',
+    requirements: 'Règles documentaires',
   },
   header: { search: 'Rechercher', searchSoon: 'Bientôt disponible' },
   user: {
@@ -67,6 +68,44 @@ export const strings = {
     description: 'Relances, brouillons de messages et approbations.',
     emptyTitle: 'Aucun suivi en attente',
     emptyDescription: 'Les relances à envoyer aux patients apparaîtront ici pour validation.',
+  },
+  documentCategories: {
+    ID_DOCUMENT: "Pièce d'identité",
+    INSURANCE_CARD: "Carte d'assurance",
+    PRESCRIPTION: 'Ordonnance',
+    REFERRAL_LETTER: "Lettre d'orientation",
+    CONSENT_FORM: 'Formulaire de consentement',
+    LAB_RESULT: "Résultat d'analyse",
+    IMAGING_REPORT: "Compte rendu d'imagerie",
+    OTHER: 'Autre',
+  } satisfies Record<DocumentCategory, string>,
+  requirements: {
+    title: 'Règles documentaires',
+    description: 'Documents exigés pour chaque type de rendez-vous.',
+    forbiddenTitle: 'Accès réservé',
+    forbiddenDescription:
+      'Seuls les responsables de clinique peuvent modifier les règles documentaires.',
+    appointmentType: 'Type de rendez-vous',
+    noTypesTitle: 'Aucun type de rendez-vous',
+    noTypesDescription: 'Créez des types de rendez-vous pour leur associer des documents exigés.',
+    noRules: 'Aucun document exigé pour ce type de rendez-vous.',
+    loadError: 'Impossible de charger les règles. Veuillez réessayer.',
+    category: 'Document',
+    mandatory: 'Obligatoire',
+    needsVerification: 'Vérification requise',
+    validityDays: 'Validité (jours)',
+    validityHint: 'Vide = sans expiration',
+    validityInvalid: 'Entre 1 et 3650 jours',
+    save: 'Enregistrer',
+    saving: 'Enregistrement…',
+    saved: 'Règle enregistrée',
+    remove: 'Supprimer',
+    addTitle: 'Ajouter un document exigé',
+    add: 'Ajouter',
+    allCategoriesUsed: 'Tous les types de document ont déjà une règle.',
+    conflict: 'Ce type de rendez-vous a déjà une règle pour ce document.',
+    saveError: "La modification n'a pas été enregistrée. Veuillez réessayer.",
+    ruleFor: (category: string) => `Règle : ${category}`,
   },
   notFound: {
     title: 'Page introuvable',
