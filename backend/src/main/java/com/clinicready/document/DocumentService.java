@@ -5,10 +5,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.NoSuchFileException;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,21 +41,30 @@ public class DocumentService {
     public record DocumentContent(Document document, InputStream stream) {
     }
 
+    /** Text read from a document's file. Never log it. */
+    public record ExtractedText(String text, int pageCount, boolean truncated) {
+    }
+
     private final DocumentRepository documents;
     private final DocumentStorage storage;
     private final DocumentProperties properties;
     private final PatientService patients;
     private final CurrentUserService currentUser;
     private final AuthorizationService authorization;
+    private final DocumentTextRepository texts;
+    private final ApplicationEventPublisher events;
 
     DocumentService(DocumentRepository documents, DocumentStorage storage, DocumentProperties properties,
-            PatientService patients, CurrentUserService currentUser, AuthorizationService authorization) {
+            PatientService patients, CurrentUserService currentUser, AuthorizationService authorization,
+            DocumentTextRepository texts, ApplicationEventPublisher events) {
         this.documents = documents;
         this.storage = storage;
         this.properties = properties;
         this.patients = patients;
         this.currentUser = currentUser;
         this.authorization = authorization;
+        this.texts = texts;
+        this.events = events;
     }
 
     /**
@@ -87,6 +98,7 @@ public class DocumentService {
                     sanitizeFilename(request.filename()), type.mimeType(), stored.sizeBytes(), stored.sha256(),
                     storageKey, currentUser.userId());
             documents.saveAndFlush(document);
+            events.publishEvent(new DocumentUploaded(id)); // text extraction starts after commit
             log.info("Document {} uploaded: patient={} category={} version={}", id, patientId,
                     request.category(), version);
             return document;
@@ -115,6 +127,17 @@ public class DocumentService {
                 .orElseThrow(() -> new NotFoundException("Document"));
         patients.get(document.getPatientId());
         return document;
+    }
+
+    /**
+     * The document's extracted text, after the same checks as {@link #get}. Empty while extraction is
+     * pending or if it failed: check {@link Document#getExtractionStatus()} to tell which.
+     */
+    @Transactional(readOnly = true)
+    public Optional<ExtractedText> extractedText(UUID id) {
+        Document document = get(id);
+        return texts.findByDocumentIdAndClinicId(document.getId(), document.getClinicId())
+                .map(t -> new ExtractedText(t.getContent(), t.getPageCount(), t.isTruncated()));
     }
 
     /** Opens the file. The only way to read stored bytes: callers must pass the same checks as {@link #get}. */

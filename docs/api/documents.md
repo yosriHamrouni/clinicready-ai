@@ -28,7 +28,10 @@ A document or patient of another clinic, or one the user may not see, is reporte
   "sizeBytes": 48213,
   "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
   "uploadedBy": "6f1c…",
-  "uploadedAt": "2026-11-11T19:24:04.949Z"
+  "uploadedAt": "2026-11-11T19:24:04.949Z",
+  "extractionStatus": "EXTRACTED",
+  "extractionFailure": null,
+  "extractedAt": "2026-11-11T19:24:05.312Z"
 }
 ```
 
@@ -38,6 +41,9 @@ A document or patient of another clinic, or one the user may not see, is reporte
 - `version`: starts at 1 per patient and category; each new upload of the same category is the next version. Earlier versions are kept.
 - `contentType` is determined from the file's bytes, not from the client.
 - `sha256` is the lowercase hex SHA-256 of the stored bytes.
+- `extractionStatus`: whether the system could read the file's text (see [Text extraction](#text-extraction)). `PENDING` on creation, then `EXTRACTED` or `EXTRACTION_FAILED`. Independent of `status`.
+- `extractionFailure`: set only when `extractionStatus` is `EXTRACTION_FAILED`: `NO_TEXT_LAYER`, `ENCRYPTED`, `UNREADABLE`, `FILE_MISSING` or `INTERNAL_ERROR`.
+- `extractedAt`: when extraction finished, successfully or not; `null` while pending.
 
 ## `POST /patients/{patientId}/documents`
 
@@ -75,6 +81,22 @@ A document or patient of another clinic, or one the user may not see, is reporte
 
 The browser sends the session cookie automatically, so `<img src>` / `<iframe src>` pointing at this URL work; the URL cannot be shared with someone who is not logged in.
 
+## Text extraction
+
+After an upload commits, the text of the file is extracted in the background (PDFBox). Poll `GET /documents/{id}` to see the result; it usually takes well under a second.
+
+| Result | When |
+| --- | --- |
+| `EXTRACTED` | A PDF with a text layer. The text is stored server side for later features (metadata extraction, the agent). It is not returned by the API and never logged. |
+| `EXTRACTION_FAILED` / `NO_TEXT_LAYER` | A JPEG or PNG, or a PDF made of scanned pages. Needs OCR (not available yet). |
+| `EXTRACTION_FAILED` / `ENCRYPTED` | A password-protected PDF. |
+| `EXTRACTION_FAILED` / `UNREADABLE` | A corrupt PDF. |
+| `EXTRACTION_FAILED` / `FILE_MISSING` | The stored file is gone. |
+
+A failed extraction is **not** a missing document: the document exists, the system just cannot read it. Readiness reports such a requirement as `NEEDS_REVIEW`, never `MISSING`.
+
+Only the first 100 pages and 200 000 characters are kept. A document left `PENDING` (for example after a restart) is picked up again at startup and by a sweep every 5 minutes.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -82,3 +104,7 @@ The browser sends the session cookie automatically, so `<img src>` / `<iframe sr
 | `DOCUMENTS_STORAGE_PATH` | `./storage/documents` (`/data/documents` in Docker) | Where files are written. Mount a persistent volume. |
 | `DOCUMENTS_MAX_SIZE` | `10MB` | Largest accepted file. |
 | `DOCUMENTS_MAX_REQUEST_SIZE` | `12MB` | Spring multipart request limit; keep it above `DOCUMENTS_MAX_SIZE`. |
+| `clinicready.documents.extraction.threads` | `2` | Background extraction workers. |
+| `clinicready.documents.extraction.max-pages` | `100` | Pages read per PDF. |
+| `clinicready.documents.extraction.max-chars` | `200000` | Characters stored per document. |
+| `clinicready.documents.extraction.sweep-interval` | `PT5M` | How often documents stuck in `PENDING` are re-queued. |

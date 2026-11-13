@@ -8,7 +8,8 @@ RUN ./mvnw -q -B package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-RUN groupadd --system app && useradd --system --gid app app \n    && mkdir -p /data/documents && chown app:app /data/documents
+RUN groupadd --system app && useradd --system --gid app app \
+    && mkdir -p /data/documents && chown app:app /data/documents
 ENV DOCUMENTS_STORAGE_PATH=/data/documents
 VOLUME /data/documents
 COPY --from=build /app/target/*.jar app.jar
