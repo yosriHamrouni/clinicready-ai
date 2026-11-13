@@ -1,4 +1,12 @@
-import { Bot, FileCheck, LayoutDashboard, ListChecks, Users, type LucideIcon } from 'lucide-react';
+import {
+  Bot,
+  CalendarDays,
+  FileCheck,
+  LayoutDashboard,
+  ListChecks,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import type { Role } from '../api/types';
 import { strings } from '../lib/strings';
 
@@ -13,6 +21,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: strings.nav.dashboard, icon: LayoutDashboard },
   { to: '/patients', label: strings.nav.patients, icon: Users },
+  { to: '/appointments', label: strings.nav.appointments, icon: CalendarDays },
   { to: '/agent', label: strings.nav.agent, icon: Bot },
   { to: '/follow-ups', label: strings.nav.followUps, icon: ListChecks },
   {

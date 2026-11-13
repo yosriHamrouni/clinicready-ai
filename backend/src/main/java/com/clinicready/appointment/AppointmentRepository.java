@@ -6,9 +6,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
-interface AppointmentRepository extends JpaRepository<Appointment, UUID> {
+interface AppointmentRepository extends JpaRepository<Appointment, UUID>, JpaSpecificationExecutor<Appointment> {
 
     Optional<Appointment> findByIdAndClinicId(UUID id, UUID clinicId);
 

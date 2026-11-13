@@ -166,10 +166,16 @@ class ClinicScopingIntegrationTest {
         assertThatThrownBy(call::execute).isInstanceOf(NotFoundException.class);
     }
 
-    private static void signIn(Role role, UUID clinicId, UUID practitionerId) {
+    /** Signs in a real user row: writes are audited, and audit events reference their actor. */
+    private void signIn(Role role, UUID clinicId, UUID practitionerId) {
+        UUID userId = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO app_user (id, clinic_id, email, password_hash, full_name, role)
+                VALUES (?, ?, ?, 'not-a-real-hash', 'User Test', ?)""",
+                userId, clinicId, userId + "@scoping-test.test", role.name());
         Jwt.Builder jwt = Jwt.withTokenValue("test")
                 .header("alg", "HS256")
-                .subject(UUID.randomUUID().toString())
+                .subject(userId.toString())
                 .claim(JwtService.CLAIM_CLINIC_ID, clinicId.toString())
                 .claim(JwtService.CLAIM_ROLE, role.name());
         if (practitionerId != null) {
