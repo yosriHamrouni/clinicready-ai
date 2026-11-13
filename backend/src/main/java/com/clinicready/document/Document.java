@@ -60,6 +60,18 @@ public class Document {
     @Column(name = "uploaded_at", nullable = false, updatable = false)
     private Instant uploadedAt;
 
+    // Written only by DocumentRepository#markExtracted / #markExtractionFailed, never through the entity.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "extraction_status", nullable = false, insertable = false, updatable = false)
+    private ExtractionStatus extractionStatus = ExtractionStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "extraction_failure", insertable = false, updatable = false)
+    private ExtractionFailure extractionFailure;
+
+    @Column(name = "extracted_at", insertable = false, updatable = false)
+    private Instant extractedAt;
+
     protected Document() {
     }
 
@@ -136,5 +148,19 @@ public class Document {
 
     public Instant getUploadedAt() {
         return uploadedAt;
+    }
+
+    public ExtractionStatus getExtractionStatus() {
+        return extractionStatus;
+    }
+
+    /** Null unless the status is {@link ExtractionStatus#EXTRACTION_FAILED}. */
+    public ExtractionFailure getExtractionFailure() {
+        return extractionFailure;
+    }
+
+    /** When extraction finished (succeeded or failed); null while pending. */
+    public Instant getExtractedAt() {
+        return extractedAt;
     }
 }

@@ -31,7 +31,7 @@ class LocalDocumentStorageTest {
 
     @BeforeEach
     void setUp() {
-        storage = new LocalDocumentStorage(new DocumentProperties(root, DataSize.ofBytes(MAX)));
+        storage = new LocalDocumentStorage(new DocumentProperties(root, DataSize.ofBytes(MAX), null));
     }
 
     private static String sha256(byte[] bytes) throws Exception {
