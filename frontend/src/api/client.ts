@@ -37,6 +37,11 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/** Absolute URL of an API path, e.g. for <img src> / <iframe src> (the session cookie is sent). */
+export function apiUrl(path: string): string {
+  return buildUrl(path);
+}
+
 function buildUrl(path: string): string {
   // Absolute URL so it also works outside a browser page (tests).
   return new URL(`${BASE_URL}${path}`, window.location.origin).toString();
@@ -109,5 +114,7 @@ export const post = <T, B = unknown>(path: string, body?: B, opts?: RequestOptio
   request<T>('POST', path, body, opts);
 export const put = <T, B = unknown>(path: string, body?: B, opts?: RequestOptions) =>
   request<T>('PUT', path, body, opts);
+export const patch = <T, B = unknown>(path: string, body?: B, opts?: RequestOptions) =>
+  request<T>('PATCH', path, body, opts);
 export const del = <T>(path: string, opts?: RequestOptions) =>
   request<T>('DELETE', path, undefined, opts);

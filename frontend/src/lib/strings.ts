@@ -3,6 +3,9 @@ import type {
   ChecklistItemStatus,
   ContactMethod,
   DocumentCategory,
+  DocumentStatus,
+  ExtractionStatus,
+  MetadataFieldKey,
   Language,
   Role,
 } from '../api/types';
@@ -210,6 +213,47 @@ export const strings = {
     conflict: 'Ce type de rendez-vous a déjà une règle pour ce document.',
     saveError: "La modification n'a pas été enregistrée. Veuillez réessayer.",
     ruleFor: (category: string) => `Règle : ${category}`,
+  },
+  documents: {
+    title: 'Documents',
+    empty: 'Aucun document téléversé pour ce patient.',
+    loadError: 'Impossible de charger les documents. Veuillez réessayer.',
+    list: 'Documents du patient',
+    version: (n: number) => `v${n}`,
+    uploadedOn: (date: string) => `Téléversé le ${date}`,
+    statuses: {
+      UPLOADED: 'Téléversé',
+      NEEDS_REVIEW: 'À vérifier',
+      VERIFIED: 'Vérifié',
+      REJECTED: 'Rejeté',
+    } satisfies Record<DocumentStatus, string>,
+    extraction: {
+      PENDING: 'Lecture en cours',
+      EXTRACTED: 'Texte lu',
+      EXTRACTION_FAILED: 'Lecture impossible',
+    } satisfies Record<ExtractionStatus, string>,
+    preview: 'Aperçu du document',
+    previewFallback: 'Aperçu indisponible pour ce type de fichier.',
+    openFile: 'Ouvrir le fichier',
+    metadataTitle: 'Informations extraites',
+    metadataHint:
+      'Vérifiez les informations lues dans le document et corrigez-les si besoin. Un champ vide est considéré comme non renseigné.',
+    metadataLoadError: 'Impossible de charger les informations du document.',
+    fields: {
+      documentDate: 'Date du document',
+      expiryDate: "Date d'expiration",
+      issuer: 'Émetteur',
+      documentNumber: 'Numéro du document',
+      holderName: 'Nom du titulaire',
+    } satisfies Record<MetadataFieldKey, string>,
+    save: 'Enregistrer les corrections',
+    saving: 'Enregistrement…',
+    saved: 'Corrections enregistrées',
+    saveError:
+      "Les corrections n'ont pas été enregistrées. Veuillez vérifier les valeurs et réessayer.",
+    neverEdited: 'Aucune correction enregistrée.',
+    lastEdit: (name: string | null, date: string) =>
+      name ? `Dernière modification par ${name}, le ${date}` : `Dernière modification le ${date}`,
   },
   notFound: {
     title: 'Page introuvable',

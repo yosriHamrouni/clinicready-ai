@@ -4,8 +4,13 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.NoSuchFileException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -15,6 +20,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.clinicready.audit.AuditAction;
+import com.clinicready.audit.AuditService;
+import com.clinicready.common.InvalidRequestException;
 import com.clinicready.common.NotFoundException;
 import com.clinicready.document.DocumentStorage.StoredFile;
 import com.clinicready.document.FileTypeDetector.FileType;
@@ -23,6 +31,7 @@ import com.clinicready.patient.PatientService;
 import com.clinicready.security.AuthorizationService;
 import com.clinicready.security.CurrentUserService;
 import com.clinicready.security.Permission;
+import com.clinicready.security.UserDirectory;
 
 /**
  * Documents of the current user's clinic. Patient visibility is delegated to {@link PatientService},
@@ -53,10 +62,14 @@ public class DocumentService {
     private final AuthorizationService authorization;
     private final DocumentTextRepository texts;
     private final ApplicationEventPublisher events;
+    private final DocumentMetadataRepository metadata;
+    private final AuditService audit;
+    private final UserDirectory userDirectory;
 
     DocumentService(DocumentRepository documents, DocumentStorage storage, DocumentProperties properties,
             PatientService patients, CurrentUserService currentUser, AuthorizationService authorization,
-            DocumentTextRepository texts, ApplicationEventPublisher events) {
+            DocumentTextRepository texts, ApplicationEventPublisher events, DocumentMetadataRepository metadata,
+            AuditService audit, UserDirectory userDirectory) {
         this.documents = documents;
         this.storage = storage;
         this.properties = properties;
@@ -65,6 +78,9 @@ public class DocumentService {
         this.authorization = authorization;
         this.texts = texts;
         this.events = events;
+        this.metadata = metadata;
+        this.audit = audit;
+        this.userDirectory = userDirectory;
     }
 
     /**
@@ -138,6 +154,73 @@ public class DocumentService {
         Document document = get(id);
         return texts.findByDocumentIdAndClinicId(document.getId(), document.getClinicId())
                 .map(t -> new ExtractedText(t.getContent(), t.getPageCount(), t.isTruncated()));
+    }
+
+    /** The document's corrected fields after the same checks as {@link #get}; empty if never edited. */
+    @Transactional(readOnly = true)
+    public Optional<DocumentMetadata> metadata(UUID id) {
+        Document document = get(id);
+        return metadata.findByDocumentIdAndClinicId(document.getId(), document.getClinicId());
+    }
+
+    /**
+     * Applies a partial edit: each entry sets a field, a null or blank value clears it, fields not
+     * mentioned keep their value. Records who edited and when, and an audit event naming the changed
+     * fields (never their values, which can identify the patient).
+     *
+     * @throws InvalidRequestException unknown field name, or a value that is too long or not a valid date
+     */
+    @Transactional
+    public Optional<DocumentMetadata> updateMetadata(UUID id, Map<String, String> patch) {
+        authorization.require(Permission.DOCUMENT_METADATA_EDIT);
+        Document document = get(id);
+
+        Map<String, String> changes = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : patch.entrySet()) {
+            DocumentMetadataField field = DocumentMetadataField.fromKey(entry.getKey())
+                    .orElseThrow(() -> new InvalidRequestException("Unknown metadata field"));
+            String value = entry.getValue() == null ? "" : entry.getValue().trim();
+            if (!value.isEmpty() && !field.accepts(value)) {
+                throw new InvalidRequestException("Invalid value for " + field.key());
+            }
+            changes.put(field.key(), value);
+        }
+
+        DocumentMetadata row = metadata.findByDocumentIdAndClinicId(id, document.getClinicId()).orElse(null);
+        Map<String, String> merged = new TreeMap<>(row == null ? Map.of() : row.getFields());
+        List<String> changedFields = new ArrayList<>();
+        changes.forEach((key, value) -> {
+            String before = merged.get(key);
+            String after = value.isEmpty() ? null : value;
+            if (Objects.equals(before, after)) {
+                return;
+            }
+            changedFields.add(key);
+            if (after == null) {
+                merged.remove(key);
+            } else {
+                merged.put(key, after);
+            }
+        });
+        if (changedFields.isEmpty()) {
+            // Nothing changed: keep the previous editor and timestamp. A never-edited document stays empty.
+            return Optional.ofNullable(row);
+        }
+        if (row == null) {
+            row = new DocumentMetadata(id, document.getClinicId(), merged, currentUser.userId());
+        } else {
+            row.replaceFields(merged, currentUser.userId());
+        }
+        row = metadata.saveAndFlush(row);
+        audit.record(AuditAction.DOCUMENT_METADATA_UPDATED, "Document", id, Map.of("changedFields", changedFields));
+        log.info("Document {} metadata updated: fields={}", id, changedFields);
+        return Optional.of(row);
+    }
+
+    /** Display name of whoever last edited the fields, if that user still belongs to this clinic. */
+    @Transactional(readOnly = true)
+    public Optional<String> editorName(DocumentMetadata metadata) {
+        return userDirectory.fullName(metadata.getUpdatedBy(), currentUser.clinicId());
     }
 
     /** Opens the file. The only way to read stored bytes: callers must pass the same checks as {@link #get}. */
