@@ -12,6 +12,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import jakarta.persistence.EntityManager;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,6 +35,9 @@ class DocumentMetadataIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void aDocumentWithNoEditsHasEmptyFieldsAndNoEditor() throws Exception {
@@ -89,6 +94,7 @@ class DocumentMetadataIntegrationTest {
 
         edit(reception, doc, "{\"fields\":{\"holderName\":\"Secret Name\"}}").andExpect(status().isOk());
 
+        entityManager.flush();
         String summary = jdbc.queryForObject("""
                 SELECT change_summary::text FROM audit_event
                 WHERE entity_id = ? AND action = 'DOCUMENT_METADATA_UPDATED' AND actor_user_id = ?""",
@@ -240,6 +246,7 @@ class DocumentMetadataIntegrationTest {
     }
 
     private int count(String tableAndFilter) {
+        entityManager.flush(); // audit events are saved without a flush; make them visible to raw SQL
         return jdbc.queryForObject("SELECT count(*) FROM " + tableAndFilter, Integer.class);
     }
 }
