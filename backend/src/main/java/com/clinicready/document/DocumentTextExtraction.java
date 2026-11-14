@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.data.domain.Limit;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -49,10 +50,11 @@ class DocumentTextExtraction {
     private final TextExtractor extractor;
     private final TransactionTemplate transaction;
     private final Executor executor;
+    private final ApplicationEventPublisher events;
 
     DocumentTextExtraction(DocumentRepository documents, DocumentTextRepository texts, DocumentStorage storage,
             DocumentProperties properties, TextExtractor extractor, TransactionTemplate transaction,
-            @Qualifier(DocumentConfig.EXTRACTION_EXECUTOR) Executor executor) {
+            @Qualifier(DocumentConfig.EXTRACTION_EXECUTOR) Executor executor, ApplicationEventPublisher events) {
         this.documents = documents;
         this.texts = texts;
         this.storage = storage;
@@ -60,6 +62,7 @@ class DocumentTextExtraction {
         this.extractor = extractor;
         this.transaction = transaction;
         this.executor = executor;
+        this.events = events;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -136,6 +139,7 @@ class DocumentTextExtraction {
                     if (documents.markExtracted(id, now) == 1) {
                         texts.save(new DocumentText(id, document.getClinicId(), text.text(), text.pageCount(),
                                 text.truncated()));
+                        events.publishEvent(new DocumentTextExtracted(id)); // classification starts after commit
                         log.info("Document {} text extracted: pages={} chars={} truncated={}", id,
                                 text.pageCount(), text.text().length(), text.truncated());
                     }
