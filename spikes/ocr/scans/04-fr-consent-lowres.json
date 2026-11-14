@@ -1,0 +1,20 @@
+{
+  "lang": "fra",
+  "lines": [
+    "FORMULAIRE DE CONSENTEMENT ÉCLAIRÉ",
+    "Hôpital Régional de Sousse",
+    "Je soussigné(e) Hatem Cherif, né le 22/07/1979,",
+    "déclare avoir été informé(e) de la nature de l'intervention",
+    "et des risques éventuels, et j'accepte de la subir.",
+    "Fait à Sousse, le 30/10/2026",
+    "Signature du patient :"
+  ],
+  "key_fields": [
+    "30/10/2026",
+    "Hatem Cherif"
+  ],
+  "degradation": {
+    "downscale": 0.55,
+    "blur": 1.0
+  }
+}

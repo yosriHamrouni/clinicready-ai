@@ -1,0 +1,20 @@
+{
+  "lang": "fra",
+  "lines": [
+    "CAISSE NATIONALE D'ASSURANCE MALADIE",
+    "Attestation de prise en charge",
+    "Assuré : Rania Ben Salah",
+    "N° d'affiliation : 12 345 678 90",
+    "Valable jusqu'au 31/12/2026",
+    "Ayants droit : 2",
+    "Cette attestation est délivrée pour servir et valoir ce que de droit."
+  ],
+  "key_fields": [
+    "Rania Ben Salah",
+    "12 345 678 90",
+    "31/12/2026"
+  ],
+  "degradation": {
+    "noise": 12
+  }
+}

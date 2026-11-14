@@ -1,0 +1,24 @@
+{
+  "lang": "fra",
+  "lines": [
+    "Clinique Les Jasmins - Sfax",
+    "LETTRE D'ORIENTATION",
+    "Sfax, le 05/11/2026",
+    "Cher confrère,",
+    "Je vous adresse Mme Salma Jebali, 52 ans,",
+    "pour avis cardiologique devant des palpitations",
+    "récurrentes depuis trois semaines.",
+    "ECG de repos normal. Traitement en cours : aucun.",
+    "Bien confraternellement,",
+    "Dr Mehdi Karray"
+  ],
+  "key_fields": [
+    "05/11/2026",
+    "Salma Jebali",
+    "Mehdi Karray"
+  ],
+  "degradation": {
+    "rotate": 2.0,
+    "noise": 18
+  }
+}

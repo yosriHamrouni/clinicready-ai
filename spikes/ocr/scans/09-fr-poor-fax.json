@@ -1,0 +1,24 @@
+{
+  "lang": "fra",
+  "lines": [
+    "Centre de Radiologie Carthage",
+    "COMPTE RENDU D'ÉCHOGRAPHIE",
+    "Date : 01/11/2026",
+    "Patient : Imen Chaabane",
+    "Échographie abdominale : foie de taille normale,",
+    "vésicule biliaire alithiasique, reins sans anomalie.",
+    "Dr Fares Meddeb, radiologue"
+  ],
+  "key_fields": [
+    "01/11/2026",
+    "Imen Chaabane",
+    "Fares Meddeb"
+  ],
+  "degradation": {
+    "downscale": 0.4,
+    "blur": 1.6,
+    "noise": 45,
+    "rotate": 3.0,
+    "contrast": 0.45
+  }
+}
