@@ -157,4 +157,5 @@ Without a model configured (`AI_CHAT_PROVIDER` unset or `none`), documents stay 
 | `AI_CHAT_PROVIDER` | `none` | Set to `anthropic` to enable AI extraction (also needs `ANTHROPIC_API_KEY`). |
 | `ANTHROPIC_API_KEY` | empty | Provider key; never commit it. |
 | `AI_EXTRACTION_MODEL` | `claude-haiku-5-5` | Model used for extraction. |
+| `AI_TIMEOUT` | `30s` | Connect and read timeout for every model call. Each call logs its token usage (`model call model=... promptTokens=...`). |
 | `DOCUMENTS_MIN_CONFIDENCE` | `0.7` | Below this an observation is flagged for review. |

@@ -1,34 +1,29 @@
 package com.clinicready.document;
 
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
-/**
- * Spring AI wiring (YOS-17, pulled forward). The chat model bean exists only when
- * {@code spring.ai.model.chat} names a provider, so it is looked up lazily.
- */
+import com.clinicready.agent.AgentChat;
+
+/** Document classification on top of {@link AgentChat}, which owns the model, timeout and usage capture. */
 @Component
 class SpringAiExtractionModel implements ExtractionModel {
 
-    private final ObjectProvider<ChatModel> chatModel;
+    private final AgentChat chat;
 
-    SpringAiExtractionModel(ObjectProvider<ChatModel> chatModel) {
-        this.chatModel = chatModel;
+    SpringAiExtractionModel(AgentChat chat) {
+        this.chat = chat;
     }
 
     @Override
     public boolean available() {
-        return chatModel.getIfAvailable() != null;
+        return chat.available();
     }
 
     @Override
     public Answer complete(String systemPrompt, String documentText) {
-        ChatModel model = chatModel.getObject();
         // The text goes in as a template parameter: braces inside a document must not be parsed as a template.
-        ChatResponse response = ChatClient.create(model).prompt()
+        ChatResponse response = chat.client().prompt()
                 .system(systemPrompt)
                 .user(u -> u.text("{document}").param("document", documentText))
                 .call()
