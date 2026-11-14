@@ -1,0 +1,21 @@
+{
+  "lang": "fra",
+  "lines": [
+    "Laboratoire d'analyses médicales El Manar",
+    "Résultats d'analyses",
+    "Date de prélèvement : 28/10/2026",
+    "Patient : Karim Mansouri",
+    "Glycémie à jeun : 0,95 g/L (0,70 - 1,10)",
+    "Hémoglobine : 13,8 g/dL (13,0 - 17,0)",
+    "Cholestérol total : 1,92 g/L (< 2,00)",
+    "Créatinine : 9 mg/L (7 - 13)",
+    "Validé par le Dr Nadia Gharbi, biologiste"
+  ],
+  "key_fields": [
+    "28/10/2026",
+    "Karim Mansouri",
+    "Nadia Gharbi",
+    "0,95 g/L"
+  ],
+  "degradation": {}
+}

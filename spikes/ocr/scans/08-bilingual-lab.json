@@ -1,0 +1,21 @@
+{
+  "lang": "fra+ara",
+  "lines": [
+    "Laboratoire Central de Tunis",
+    "مخبر التحاليل الطبية",
+    "Date : 29/10/2026",
+    "التاريخ: 29/10/2026",
+    "Patient : Youssef Hammami",
+    "المريض: يوسف الحمامي",
+    "Glycémie : 1,05 g/L",
+    "نسبة السكر في الدم: 1,05 غ/ل",
+    "Validé par Dr Amel Bouzid"
+  ],
+  "key_fields": [
+    "29/10/2026",
+    "Youssef Hammami",
+    "يوسف الحمامي",
+    "Amel Bouzid"
+  ],
+  "degradation": {}
+}

@@ -1,0 +1,21 @@
+{
+  "lang": "fra",
+  "lines": [
+    "Cabinet du Dr Sami Ben Youssef",
+    "Médecine générale - Tunis",
+    "ORDONNANCE",
+    "Date : 02/11/2026",
+    "Patient : Leila Trabelsi",
+    "Né(e) le 14/03/1985",
+    "1. Amoxicilline 500 mg, 1 gélule 3 fois par jour pendant 7 jours",
+    "2. Paracétamol 1 g, 1 comprimé si douleur ou fièvre",
+    "3. Vitamine D3, 1 ampoule par mois",
+    "Signature et cachet du médecin"
+  ],
+  "key_fields": [
+    "02/11/2026",
+    "Leila Trabelsi",
+    "Sami Ben Youssef"
+  ],
+  "degradation": {}
+}
