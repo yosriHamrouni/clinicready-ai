@@ -53,6 +53,9 @@ public class AgentTools {
 
     private static final Logger log = LoggerFactory.getLogger(AgentTools.class);
 
+    /** The agent run whose tool calls this thread is executing; set by the orchestrator, null otherwise. */
+    static final ThreadLocal<UUID> CURRENT_RUN = new ThreadLocal<>();
+
     /** Requirement codes of the two checks every appointment has besides its type's document rules. */
     static final String EXPECTED_EXAMINATIONS = "EXPECTED_EXAMINATIONS";
     static final String ADVANCE_PAYMENT = "ADVANCE_PAYMENT";
@@ -269,7 +272,7 @@ public class AgentTools {
         }
         return call("createFollowUpDraft", () -> {
             FollowUpService.DraftOutcome outcome = followUps.createDraft(appointment, requirementCode.trim(), lang,
-                    null);
+                    CURRENT_RUN.get());
             return new DraftResult(outcome.task().getId(), outcome.task().getStatus(),
                     outcome.created() ? "CREATED" : "EXISTING");
         });

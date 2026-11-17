@@ -12,6 +12,8 @@ All endpoints are under `/api/v1`. Contracts agreed in M0 go here (OpenAPI YAML 
 
 - [x] Readiness: `POST /appointments/{id}/readiness-checks`, `GET /appointments/{id}/readiness` ([readiness.md](readiness.md))
 
-Later: agent runs, follow-ups, approvals, audit.
+- [x] Agent runs: `POST /agent-runs`, `GET /agent-runs/{id}` ([agent-runs.md](agent-runs.md))
+
+Later: follow-ups, approvals, audit.
 
 Changes to a contract go through a PR reviewed by both backend and frontend.
