@@ -61,7 +61,7 @@ class AgentOrchestrator {
 
     /** Argument names a tool may receive; anything else is stored as "[redacted]". */
     private static final Set<String> LOGGABLE_ARGUMENTS = Set.of("appointmentId", "patientId", "documentId",
-            "taskId", "appointmentTypeId", "practitionerId", "dateFrom", "dateTo", "requirementCode", "language",
+            "taskId", "approvalId", "appointmentTypeId", "practitionerId", "dateFrom", "dateTo", "requirementCode", "language",
             "fields");
 
     static final String SYSTEM_PROMPT = """

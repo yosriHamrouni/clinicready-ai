@@ -74,6 +74,21 @@ public class FollowUpTask {
     @Column(name = "run_id", updatable = false)
     private UUID runId;
 
+    @Column(name = "approval_id")
+    private UUID approvalId;
+
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
+    @Column(name = "delivered_by")
+    private UUID deliveredBy;
+
+    @Column(name = "delivered_by_run")
+    private UUID deliveredByRun;
+
+    @Column(name = "resolved_at")
+    private Instant resolvedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -104,9 +119,51 @@ public class FollowUpTask {
         this.updatedAt = createdAt;
     }
 
-    void moveTo(FollowUpStatus next) {
+    /** @throws IllegalStateException the state machine does not allow it; callers check first */
+    private void moveTo(FollowUpStatus next) {
+        if (!status.canMoveTo(next)) {
+            throw new IllegalStateException(status + " -> " + next);
+        }
         status = next;
         updatedAt = Instant.now();
+    }
+
+    void decide(FollowUpApproval approval) {
+        moveTo(approval.getDecision() == FollowUpApproval.Decision.APPROVED ? FollowUpStatus.APPROVED
+                : FollowUpStatus.REJECTED);
+        approvalId = approval.getId();
+    }
+
+    void deliver(UUID by, UUID runId) {
+        moveTo(FollowUpStatus.DELIVERED);
+        deliveredAt = updatedAt;
+        deliveredBy = by;
+        deliveredByRun = runId;
+    }
+
+    void resolve() {
+        moveTo(FollowUpStatus.RESOLVED);
+        resolvedAt = updatedAt;
+    }
+
+    public UUID getApprovalId() {
+        return approvalId;
+    }
+
+    public Instant getDeliveredAt() {
+        return deliveredAt;
+    }
+
+    public UUID getDeliveredBy() {
+        return deliveredBy;
+    }
+
+    public UUID getDeliveredByRun() {
+        return deliveredByRun;
+    }
+
+    public Instant getResolvedAt() {
+        return resolvedAt;
     }
 
     public UUID getId() {

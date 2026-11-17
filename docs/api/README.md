@@ -14,6 +14,8 @@ All endpoints are under `/api/v1`. Contracts agreed in M0 go here (OpenAPI YAML 
 
 - [x] Agent runs: `POST /agent-runs`, `GET /agent-runs/{id}` ([agent-runs.md](agent-runs.md))
 
-Later: follow-ups, approvals, audit.
+- [x] Follow-ups and approvals: `GET /follow-up-tasks`, `GET /follow-up-tasks/{id}`, `POST /follow-up-tasks/{id}/approve|reject|delivered|resolve` ([follow-ups.md](follow-ups.md))
+
+Later: draft editing (YOS-31), audit read (YOS-36).
 
 Changes to a contract go through a PR reviewed by both backend and frontend.

@@ -14,6 +14,8 @@ public record ToolResult<T>(ToolStatus status, String message, T data) {
         NOT_FOUND,
         FORBIDDEN,
         INVALID_INPUT,
+        /** The state does not allow it (illegal transition, missing or used approval). */
+        CONFLICT,
         ERROR
     }
 
@@ -30,6 +32,7 @@ public record ToolResult<T>(ToolStatus status, String message, T data) {
             case NOT_FOUND -> ToolStatus.NOT_FOUND;
             case FORBIDDEN -> ToolStatus.FORBIDDEN;
             case BAD_REQUEST -> ToolStatus.INVALID_INPUT;
+            case CONFLICT -> ToolStatus.CONFLICT;
             default -> ToolStatus.ERROR;
         };
         return new ToolResult<>(status, e.getMessage(), null);

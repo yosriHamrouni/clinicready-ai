@@ -101,7 +101,10 @@ public class AgentTools {
     public record FollowUpTasks(List<TaskStatus> tasks) {
     }
 
-    /** {@code outcome} is CREATED, or EXISTING when an open task for the requirement was returned instead. */
+    /**
+     * {@code outcome}: CREATED, or EXISTING when an open task for the requirement was returned instead, or
+     * EXECUTED for an approved action.
+     */
     public record DraftResult(UUID taskId, FollowUpStatus status, String outcome) {
     }
 
@@ -275,6 +278,22 @@ public class AgentTools {
                     CURRENT_RUN.get());
             return new DraftResult(outcome.task().getId(), outcome.task().getStatus(),
                     outcome.created() ? "CREATED" : "EXISTING");
+        });
+    }
+
+    @Tool(name = "submitApprovedAction", description = """
+            Executes the approved action of a follow-up task. Fails unless approvalId is the task's recorded             APPROVED decision, which only a staff member can make; you cannot approve anything yourself.""")
+    public ToolResult<DraftResult> submitApprovedAction(
+            @ToolParam(description = "follow-up task id (UUID)") String taskId,
+            @ToolParam(description = "approval id (UUID) given by staff") String approvalId) {
+        UUID task = uuid(taskId);
+        UUID approval = uuid(approvalId);
+        if (task == null || approval == null) {
+            return ToolResult.invalid("taskId and approvalId must be UUIDs");
+        }
+        return call("submitApprovedAction", () -> {
+            FollowUpService.TaskView view = followUps.executeApproved(task, approval, CURRENT_RUN.get());
+            return new DraftResult(view.task().getId(), view.task().getStatus(), "EXECUTED");
         });
     }
 
