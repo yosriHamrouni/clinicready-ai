@@ -5,6 +5,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -20,12 +22,16 @@ import com.clinicready.appointment.AppointmentService;
 import com.clinicready.appointment.AppointmentStatus;
 import com.clinicready.appointment.AppointmentView;
 import com.clinicready.common.ApiException;
+import com.clinicready.common.Language;
+import com.clinicready.document.AiExtractionStatus;
 import com.clinicready.document.Document;
 import com.clinicready.document.DocumentCategory;
 import com.clinicready.document.DocumentExtraction;
 import com.clinicready.document.DocumentMetadataField;
 import com.clinicready.document.DocumentService;
 import com.clinicready.document.ExtractionStatus;
+import com.clinicready.followup.FollowUpService;
+import com.clinicready.followup.FollowUpStatus;
 import com.clinicready.readiness.AggregateStatus;
 import com.clinicready.readiness.CheckStatus;
 import com.clinicready.readiness.ReadinessService;
@@ -55,9 +61,11 @@ public class AgentTools {
     private final RequirementRuleService rules;
     private final DocumentService documents;
     private final ReadinessService readiness;
+    private final FollowUpService followUps;
 
     AgentTools(AppointmentService appointments, RequirementRuleService rules, DocumentService documents,
-            ReadinessService readiness) {
+            ReadinessService readiness, FollowUpService followUps) {
+        this.followUps = followUps;
         this.appointments = appointments;
         this.rules = rules;
         this.documents = documents;
@@ -83,7 +91,27 @@ public class AgentTools {
     public record Readiness(UUID appointmentId, AggregateStatus status, List<ReadinessCheckResult> checks) {
     }
 
-    public record FollowUpStatus(List<Object> tasks) {
+    public record TaskStatus(UUID taskId, UUID appointmentId, String requirementCode, FollowUpStatus status,
+            Instant createdAt) {
+    }
+
+    public record FollowUpTasks(List<TaskStatus> tasks) {
+    }
+
+    /** {@code outcome} is CREATED, or EXISTING when an open task for the requirement was returned instead. */
+    public record DraftResult(UUID taskId, FollowUpStatus status, String outcome) {
+    }
+
+    /** One requested field: the staff correction if any (no confidence), else the AI observation. */
+    public record InspectedField(String field, String value, String source, Double confidence) {
+    }
+
+    /** Where the values come from: the stored document version and the model that read it. */
+    public record EvidenceRef(UUID documentId, int version, String model, Instant observedAt) {
+    }
+
+    public record Inspection(UUID documentId, DocumentCategory declaredCategory, ExtractionStatus extractionStatus,
+            List<InspectedField> fields, EvidenceRef evidence) {
     }
 
     @Tool(name = "getUpcomingAppointments", description = """
@@ -164,7 +192,7 @@ public class AgentTools {
     @Tool(name = "getFollowUpStatus", description = """
             Follow-up tasks of a task id or of an appointment id, with their status, approval and delivery \
             outcome. Give exactly one of taskId or appointmentId.""")
-    public ToolResult<FollowUpStatus> getFollowUpStatus(
+    public ToolResult<FollowUpTasks> getFollowUpStatus(
             @ToolParam(required = false, description = "follow-up task id (UUID)") String taskId,
             @ToolParam(required = false, description = "appointment id (UUID)") String appointmentId) {
         if (blank(taskId) == blank(appointmentId)) {
@@ -174,13 +202,97 @@ public class AgentTools {
         if (id == null) {
             return ToolResult.invalid("ids must be UUIDs");
         }
-        return call("getFollowUpStatus", () -> {
-            if (!blank(appointmentId)) {
-                appointments.get(id); // scoping: 404 for another clinic or another practitioner's appointment
+        return call("getFollowUpStatus", () -> new FollowUpTasks(
+                (blank(taskId) ? followUps.forAppointment(id) : List.of(followUps.get(id))).stream()
+                        .map(t -> new TaskStatus(t.getId(), t.getAppointmentId(), t.getRequirementCode(),
+                                t.getStatus(), t.getCreatedAt()))
+                        .toList()));
+    }
+
+    @Tool(name = "inspectDocument", description = """
+            Reads selected fields of one document: category, documentDate, expiryDate, issuer. Staff corrections \
+            win over the AI observation. Returns ERROR when the document's text or the AI extraction failed; \
+            fields are empty while extraction is still pending.""")
+    public ToolResult<Inspection> inspectDocument(
+            @ToolParam(description = "document id (UUID)") String documentId,
+            @ToolParam(required = false, description = "fields to read; any of category, documentDate, expiryDate, issuer")
+            List<String> fields) {
+        UUID id = uuid(documentId);
+        if (id == null) {
+            return ToolResult.invalid("documentId must be a UUID");
+        }
+        List<String> wanted = fields == null || fields.isEmpty() ? INSPECTABLE : fields;
+        if (!INSPECTABLE.containsAll(wanted)) {
+            return ToolResult.invalid("fields must be among " + INSPECTABLE);
+        }
+        try {
+            Document d = documents.get(id);
+            if (d.getExtractionStatus() == ExtractionStatus.EXTRACTION_FAILED) {
+                return new ToolResult<>(ToolResult.ToolStatus.ERROR,
+                        "Text could not be read from the document (" + d.getExtractionFailure() + ")", null);
             }
-            // shortcut: follow-up tasks do not exist yet; YOS-32 replaces this with FollowUpService.
-            return new FollowUpStatus(List.of());
+            DocumentExtraction ai = documents.aiExtraction(id).orElse(null);
+            if (ai != null && ai.getStatus() == AiExtractionStatus.FAILED) {
+                return new ToolResult<>(ToolResult.ToolStatus.ERROR,
+                        "AI extraction failed (" + ai.getFailure() + ")", null);
+            }
+            Map<String, String> corrected = documents.metadata(id).map(m -> m.getFields()).orElse(Map.of());
+            List<InspectedField> values = wanted.stream().distinct().map(f -> field(f, corrected, ai)).toList();
+            return ToolResult.ok(new Inspection(d.getId(), d.getCategory(), d.getExtractionStatus(), values,
+                    new EvidenceRef(d.getId(), d.getVersion(), ai == null ? null : ai.getModelName(),
+                            ai == null ? null : ai.getCreatedAt())));
+        } catch (ApiException e) {
+            log.info("Tool inspectDocument refused: {}", e.code());
+            return ToolResult.of(e);
+        }
+    }
+
+    @Tool(name = "createFollowUpDraft", description = """
+            Proposes a follow-up task for one requirement of an appointment that is MISSING, EXPIRED or \
+            NEEDS_REVIEW in its latest readiness result. Idempotent: returns the open task if one exists \
+            (outcome EXISTING) instead of creating another. The task waits for a human approval; this tool \
+            sends nothing and approves nothing.""")
+    public ToolResult<DraftResult> createFollowUpDraft(
+            @ToolParam(description = "appointment id (UUID)") String appointmentId,
+            @ToolParam(description = "requirementCode from checkReadiness") String requirementCode,
+            @ToolParam(required = false, description = "FR or AR; omit for the patient's preferred language")
+            String language) {
+        UUID appointment = uuid(appointmentId);
+        if (appointment == null || blank(requirementCode)) {
+            return ToolResult.invalid("appointmentId must be a UUID and requirementCode is required");
+        }
+        Language lang;
+        try {
+            lang = blank(language) ? null : Language.valueOf(language.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return ToolResult.invalid("language must be FR or AR");
+        }
+        return call("createFollowUpDraft", () -> {
+            FollowUpService.DraftOutcome outcome = followUps.createDraft(appointment, requirementCode.trim(), lang,
+                    null);
+            return new DraftResult(outcome.task().getId(), outcome.task().getStatus(),
+                    outcome.created() ? "CREATED" : "EXISTING");
         });
+    }
+
+    private static final List<String> INSPECTABLE = List.of("category", "documentDate", "expiryDate", "issuer");
+
+    private static InspectedField field(String name, Map<String, String> corrected, DocumentExtraction ai) {
+        String staff = corrected.get(name);
+        if (staff != null) {
+            return new InspectedField(name, staff, "STAFF_CORRECTION", null);
+        }
+        if (ai == null) {
+            return new InspectedField(name, null, "NOT_OBSERVED", null);
+        }
+        Object observed = switch (name) {
+            case "category" -> ai.getCategory();
+            case "documentDate" -> ai.getDocumentDate();
+            case "issuer" -> ai.getIssuer();
+            default -> null; // the AI does not read expiry dates; only staff corrections carry one
+        };
+        return observed == null ? new InspectedField(name, null, "NOT_OBSERVED", ai.getConfidence())
+                : new InspectedField(name, observed.toString(), "AI_OBSERVATION", ai.getConfidence());
     }
 
     static UpcomingAppointment upcoming(AppointmentView v) {
@@ -204,14 +316,9 @@ public class AgentTools {
     }
 
     static ReadinessCheckResult check(ReadinessCheckResponse c) {
-        return new ReadinessCheckResult(requirementCode(c), c.mandatory(), c.status(),
+        return new ReadinessCheckResult(c.requirementCode(), c.mandatory(), c.status(),
                 c.documents().stream().map(ReadinessCheckResponse.DocumentReference::documentId).toList(),
                 c.reason(), c.requiresHumanReview());
-    }
-
-    /** The category for a document rule (unique per appointment type), else the built-in requirement's kind. */
-    static String requirementCode(ReadinessCheckResponse c) {
-        return c.documentCategories().size() == 1 ? c.documentCategories().get(0).name() : c.requirement().name();
     }
 
     private static <T> ToolResult<T> call(String tool, Supplier<T> body) {

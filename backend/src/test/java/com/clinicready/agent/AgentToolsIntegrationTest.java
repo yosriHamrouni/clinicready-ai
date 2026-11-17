@@ -10,6 +10,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.support.ToolCallbacks;
@@ -41,6 +44,9 @@ class AgentToolsIntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
 
     @AfterEach
@@ -54,7 +60,8 @@ class AgentToolsIntegrationTest {
         actAs(f.reception);
         List<ToolCallback> callbacks = Arrays.asList(ToolCallbacks.from(tools));
         assertThat(callbacks).extracting(c -> c.getToolDefinition().name()).contains("getUpcomingAppointments",
-                "getAppointmentRequirements", "listPatientDocuments", "checkReadiness", "getFollowUpStatus");
+                "getAppointmentRequirements", "listPatientDocuments", "checkReadiness", "getFollowUpStatus", "inspectDocument",
+                "createFollowUpDraft");
 
         ToolCallback check = callbacks.stream().filter(c -> c.getToolDefinition().name().equals("checkReadiness"))
                 .findFirst().orElseThrow();
@@ -147,6 +154,97 @@ class AgentToolsIntegrationTest {
 
         actAs(f.stranger);
         assertThat(tools.getFollowUpStatus(null, f.ownAppointment.toString()).status())
+                .isEqualTo(ToolStatus.NOT_FOUND);
+    }
+
+    @Test
+    void inspectDocumentPrefersStaffCorrectionsAndReportsFailuresAsStatus() {
+        Fixture f = fixture();
+        jdbc.update("""
+                INSERT INTO document_metadata (document_id, clinic_id, fields, updated_by, updated_at)
+                VALUES (?, ?, '{"expiryDate":"2027-01-01"}'::jsonb, ?, now())""",
+                f.document, f.reception.clinic, f.reception.id);
+        actAs(f.reception);
+
+        ToolResult<AgentTools.Inspection> result = tools.inspectDocument(f.document.toString(),
+                List.of("documentDate", "expiryDate", "issuer"));
+        assertThat(result.status()).isEqualTo(ToolStatus.OK);
+        assertThat(result.data().evidence().documentId()).isEqualTo(f.document);
+        assertThat(result.data().evidence().model()).isEqualTo("stub");
+        assertThat(result.data().fields()).extracting(AgentTools.InspectedField::source)
+                .containsExactly("AI_OBSERVATION", "STAFF_CORRECTION", "NOT_OBSERVED");
+        assertThat(result.data().fields().get(0).value()).isEqualTo("2026-10-01");
+        assertThat(result.data().fields().get(0).confidence()).isEqualTo(0.42);
+        assertThat(result.data().fields().get(1).value()).isEqualTo("2027-01-01");
+
+        assertThat(tools.inspectDocument(f.document.toString(), List.of("holderName")).status())
+                .isEqualTo(ToolStatus.INVALID_INPUT);
+
+        UUID unreadable = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO document (id, clinic_id, patient_id, category, source, version, original_filename,
+                                      content_type, size_bytes, sha256, storage_key, uploaded_by, extraction_status,
+                                      extraction_failure, extracted_at)
+                VALUES (?, ?, ?, 'OTHER', 'STAFF_UPLOAD', 1, 'scan.png', 'image/png', 10, ?, ?, ?,
+                        'EXTRACTION_FAILED', 'UNREADABLE', now())""",
+                unreadable, f.reception.clinic, f.patient, "b".repeat(64), f.reception.clinic + "/" + unreadable,
+                f.reception.id);
+        ToolResult<AgentTools.Inspection> failed = tools.inspectDocument(unreadable.toString(), null);
+        assertThat(failed.status()).isEqualTo(ToolStatus.ERROR);
+        assertThat(failed.message()).contains("UNREADABLE");
+
+        actAs(f.stranger);
+        assertThat(tools.inspectDocument(f.document.toString(), null).status()).isEqualTo(ToolStatus.NOT_FOUND);
+    }
+
+    @Test
+    void createFollowUpDraftIsIdempotentAndChangesNoReadinessOrApprovalState() {
+        Fixture f = fixture();
+        actAs(f.reception);
+        String appointment = f.ownAppointment.toString();
+
+        assertThat(tools.createFollowUpDraft(appointment, "EXPECTED_EXAMINATIONS", null).status())
+                .as("no readiness result yet").isEqualTo(ToolStatus.INVALID_INPUT);
+        tools.checkReadiness(appointment);
+        entityManager.flush();
+        Timestamp evaluatedAt = jdbc.queryForObject(
+                "SELECT evaluated_at FROM readiness_result WHERE appointment_id = ?", Timestamp.class, f.ownAppointment);
+
+        ToolResult<AgentTools.DraftResult> first = tools.createFollowUpDraft(appointment, "EXPECTED_EXAMINATIONS", null);
+        assertThat(first.status()).isEqualTo(ToolStatus.OK);
+        assertThat(first.data().outcome()).isEqualTo("CREATED");
+        assertThat(first.data().status().name()).isEqualTo("AWAITING_APPROVAL");
+        ToolResult<AgentTools.DraftResult> again = tools.createFollowUpDraft(appointment, "EXPECTED_EXAMINATIONS", "ar");
+        assertThat(again.data().outcome()).isEqualTo("EXISTING");
+        assertThat(again.data().taskId()).isEqualTo(first.data().taskId());
+        entityManager.flush();
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM follow_up_task WHERE appointment_id = ?", Integer.class,
+                f.ownAppointment)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT language FROM follow_up_task WHERE id = ?", String.class,
+                first.data().taskId())).isEqualTo("FR");
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM audit_event WHERE entity_id = ? AND action = 'FOLLOW_UP_TASK_CREATED'""",
+                Integer.class, first.data().taskId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT evaluated_at FROM readiness_result WHERE appointment_id = ?",
+                Timestamp.class, f.ownAppointment)).isEqualTo(evaluatedAt);
+
+        assertThat(tools.createFollowUpDraft(appointment, "LAB_RESULT", null).status())
+                .isEqualTo(ToolStatus.INVALID_INPUT);
+        assertThat(tools.createFollowUpDraft(appointment, "EXPECTED_EXAMINATIONS", "EN").status())
+                .isEqualTo(ToolStatus.INVALID_INPUT);
+
+        ToolResult<AgentTools.FollowUpTasks> status = tools.getFollowUpStatus(null, appointment);
+        assertThat(status.data().tasks()).singleElement().satisfies(t -> {
+            assertThat(t.taskId()).isEqualTo(first.data().taskId());
+            assertThat(t.requirementCode()).isEqualTo("EXPECTED_EXAMINATIONS");
+        });
+        assertThat(tools.getFollowUpStatus(first.data().taskId().toString(), null).data().tasks()).hasSize(1);
+
+        actAs(f.stranger);
+        assertThat(tools.getFollowUpStatus(first.data().taskId().toString(), null).status())
+                .isEqualTo(ToolStatus.NOT_FOUND);
+        assertThat(tools.createFollowUpDraft(appointment, "EXPECTED_EXAMINATIONS", null).status())
                 .isEqualTo(ToolStatus.NOT_FOUND);
     }
 

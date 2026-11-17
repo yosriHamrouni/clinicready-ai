@@ -30,6 +30,11 @@ public record ReadinessCheckResponse(
         List<DocumentReference> documents,
         List<HumanConfirmation> confirmations) {
 
+    /** Stable code of the requirement: the document category of a rule (unique per type), else the kind. */
+    public String requirementCode() {
+        return documentCategories.size() == 1 ? documentCategories.get(0).name() : requirement.name();
+    }
+
     /** A stored document the status is based on. Read it through {@code GET /documents/{documentId}}. */
     public record DocumentReference(UUID documentId, DocumentCategory category, int version, DocumentStatus status,
             Instant uploadedAt) {
