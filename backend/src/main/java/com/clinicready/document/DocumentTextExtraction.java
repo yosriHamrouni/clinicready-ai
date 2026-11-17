@@ -140,12 +140,14 @@ class DocumentTextExtraction {
                         texts.save(new DocumentText(id, document.getClinicId(), text.text(), text.pageCount(),
                                 text.truncated()));
                         events.publishEvent(new DocumentTextExtracted(id)); // classification starts after commit
+                        events.publishEvent(new PatientDocumentsChanged(document.getClinicId(), document.getPatientId()));
                         log.info("Document {} text extracted: pages={} chars={} truncated={}", id,
                                 text.pageCount(), text.text().length(), text.truncated());
                     }
                 }
                 case Failed failed -> {
                     if (documents.markExtractionFailed(id, failed.reason().name(), now) == 1) {
+                        events.publishEvent(new PatientDocumentsChanged(document.getClinicId(), document.getPatientId()));
                         log.info("Document {} text extraction failed: {}", id, failed.reason());
                     }
                 }
