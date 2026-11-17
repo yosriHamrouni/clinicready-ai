@@ -59,6 +59,10 @@ class AgentOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(AgentOrchestrator.class);
 
+    /** Tools that only read (checkReadiness recalculates, idempotently): retried once on failure. */
+    static final Set<String> SAFE_READS = Set.of("getUpcomingAppointments", "getAppointmentRequirements",
+            "listPatientDocuments", "inspectDocument", "checkReadiness", "getFollowUpStatus");
+
     /** Argument names a tool may receive; anything else is stored as "[redacted]". */
     private static final Set<String> LOGGABLE_ARGUMENTS = Set.of("appointmentId", "patientId", "documentId",
             "taskId", "approvalId", "appointmentTypeId", "practitionerId", "dateFrom", "dateTo", "requirementCode", "language",
@@ -141,7 +145,16 @@ class AgentOrchestrator {
             if (Instant.now().isAfter(deadline)) {
                 return timedOut(limits);
             }
-            ChatResponse response = chat.client().prompt(new Prompt(messages, options)).call().chatResponse();
+            ChatResponse response;
+            try {
+                response = chat.client().prompt(new Prompt(messages, options)).call().chatResponse();
+            } catch (RuntimeException e) { // timeout, provider down, refused request
+                log.warn("Agent run {}: model call failed ({})", run.getId(), e.getClass().getSimpleName());
+                runs.save(run);
+                return new Outcome(AgentRun.Status.FAILED,
+                        "The model call failed (" + e.getClass().getSimpleName() + "); nothing was changed after it",
+                        null);
+            }
             Usage usage = response.getMetadata() == null ? null : response.getMetadata().getUsage();
             int prompt = usage == null || usage.getPromptTokens() == null ? 0 : usage.getPromptTokens();
             int completion = usage == null || usage.getCompletionTokens() == null ? 0 : usage.getCompletionTokens();
@@ -156,44 +169,69 @@ class AgentOrchestrator {
             int turnTokens = prompt + completion;
             List<ToolResponseMessage.ToolResponse> results = new ArrayList<>();
             for (AssistantMessage.ToolCall call : out.getToolCalls()) {
-                if (run.getToolCalls() >= limits.maxToolCalls()) {
-                    runs.save(run);
-                    return new Outcome(AgentRun.Status.TOOL_LIMIT_EXCEEDED,
-                            "Stopped: the run asked for more than " + limits.maxToolCalls() + " tool calls", null);
-                }
-                if (Instant.now().isAfter(deadline)) {
-                    runs.save(run);
-                    return timedOut(limits);
-                }
-                long start = System.nanoTime();
                 ToolCallback callback = byName.get(call.name());
-                String result;
-                String status;
-                if (callback == null) {
-                    result = "{\"status\":\"INVALID_INPUT\",\"message\":\"unknown tool\"}";
-                    status = "UNKNOWN_TOOL";
-                } else {
-                    try {
-                        result = callback.call(call.arguments());
-                        status = statusOf(result);
-                    } catch (RuntimeException e) { // a tool that throws despite its contract
-                        result = "{\"status\":\"ERROR\",\"message\":\"the tool call failed\"}";
-                        status = "ERROR";
+                // FR-D5: a safe read is tried once more; a write is never retried blindly.
+                int attempts = callback != null && SAFE_READS.contains(call.name()) ? 2 : 1;
+                Attempt attempt = null;
+                for (int i = 0; i < attempts; i++) {
+                    if (run.getToolCalls() >= limits.maxToolCalls()) {
+                        runs.save(run);
+                        return new Outcome(AgentRun.Status.TOOL_LIMIT_EXCEEDED,
+                                "Stopped: the run asked for more than " + limits.maxToolCalls() + " tool calls", null);
+                    }
+                    if (Instant.now().isAfter(deadline)) {
+                        runs.save(run);
+                        return timedOut(limits);
+                    }
+                    attempt = invoke(callback, call);
+                    run.countCall();
+                    actions.save(new AgentAction(run, ++seq, call.name(), redact(call.arguments()), attempt.status(),
+                            attempt.latencyMs(), turnTokens));
+                    turnTokens = 0;
+                    if (!attempt.failed()) {
+                        break;
                     }
                 }
-                long latencyMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
-                run.countCall();
-                actions.save(new AgentAction(run, ++seq, call.name(), redact(call.arguments()), status, latencyMs,
-                        turnTokens));
-                turnTokens = 0;
-                if ("checkReadiness".equals(call.name()) && "OK".equals(status)) {
-                    remember(result, checked);
+                if (attempt.threw()) {
+                    runs.save(run);
+                    return new Outcome(AgentRun.Status.FAILED, "Stopped: tool " + call.name() + " failed"
+                            + (attempts > 1 ? " twice (retried once)" : " and, as a write, was not retried"), null);
                 }
-                results.add(new ToolResponseMessage.ToolResponse(call.id(), call.name(), result));
+                if ("checkReadiness".equals(call.name()) && "OK".equals(attempt.status())) {
+                    remember(attempt.result(), checked);
+                }
+                results.add(new ToolResponseMessage.ToolResponse(call.id(), call.name(), attempt.result()));
             }
             runs.save(run); // merge: this instance stays the working copy
             messages.add(new ToolResponseMessage(results));
         }
+    }
+
+    /** One execution of a tool call. {@code threw}: the tool broke its contract by throwing. */
+    private record Attempt(String result, String status, boolean threw, long latencyMs) {
+
+        boolean failed() {
+            return threw || "ERROR".equals(status);
+        }
+    }
+
+    private Attempt invoke(ToolCallback callback, AssistantMessage.ToolCall call) {
+        long start = System.nanoTime();
+        if (callback == null) {
+            return new Attempt("{\"status\":\"INVALID_INPUT\",\"message\":\"unknown tool\"}", "UNKNOWN_TOOL", false, 0);
+        }
+        try {
+            String result = callback.call(call.arguments());
+            return new Attempt(result, statusOf(result), false, elapsedMs(start));
+        } catch (RuntimeException e) {
+            log.warn("Tool {} threw {}", call.name(), e.getClass().getSimpleName());
+            return new Attempt("{\"status\":\"ERROR\",\"message\":\"the tool call failed\"}", "EXCEPTION", true,
+                    elapsedMs(start));
+        }
+    }
+
+    private static long elapsedMs(long startNanos) {
+        return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
     }
 
     private static Outcome timedOut(Limits limits) {

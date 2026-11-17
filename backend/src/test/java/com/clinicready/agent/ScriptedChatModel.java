@@ -19,10 +19,11 @@ public class ScriptedChatModel implements ChatModel {
     public static final String MODEL_NAME = "scripted-stub";
 
     /** One scripted reply. */
-    public record Step(String text, List<AssistantMessage.ToolCall> toolCalls, int promptTokens, int completionTokens) {
+    public record Step(String text, List<AssistantMessage.ToolCall> toolCalls, int promptTokens, int completionTokens,
+            RuntimeException failure) {
 
         public Step withUsage(int promptTokens, int completionTokens) {
-            return new Step(text, toolCalls, promptTokens, completionTokens);
+            return new Step(text, toolCalls, promptTokens, completionTokens, failure);
         }
     }
 
@@ -30,11 +31,17 @@ public class ScriptedChatModel implements ChatModel {
     private final List<Prompt> prompts = new ArrayList<>();
 
     public static Step text(String text) {
-        return new Step(text, List.of(), 10, 5);
+        return new Step(text, List.of(), 10, 5, null);
     }
 
     public static Step toolCall(String name, String argumentsJson) {
-        return new Step("", List.of(new AssistantMessage.ToolCall("call-" + name, "function", name, argumentsJson)), 10, 5);
+        return new Step("", List.of(new AssistantMessage.ToolCall("call-" + name, "function", name, argumentsJson)), 10, 5,
+                null);
+    }
+
+    /** The provider call fails with this exception (timeout, connection refused, …). */
+    public static Step failure(RuntimeException e) {
+        return new Step("", List.of(), 0, 0, e);
     }
 
     public void script(Step... steps) {
@@ -59,6 +66,9 @@ public class ScriptedChatModel implements ChatModel {
         Step step = script.poll();
         if (step == null) {
             throw new IllegalStateException("ScriptedChatModel has no scripted reply left");
+        }
+        if (step.failure() != null) {
+            throw step.failure();
         }
         AssistantMessage message = new AssistantMessage(step.text(), java.util.Map.of(), step.toolCalls());
         ChatResponseMetadata metadata = ChatResponseMetadata.builder().model(MODEL_NAME)
