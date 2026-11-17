@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import com.clinicready.appointment.AppointmentFilter;
@@ -274,8 +275,13 @@ public class AgentTools {
             return ToolResult.invalid("language must be FR or AR");
         }
         return call("createFollowUpDraft", () -> {
-            FollowUpService.DraftOutcome outcome = followUps.createDraft(appointment, requirementCode.trim(), lang,
-                    CURRENT_RUN.get());
+            FollowUpService.DraftOutcome outcome;
+            try {
+                outcome = followUps.createDraft(appointment, requirementCode.trim(), lang, CURRENT_RUN.get());
+            } catch (DataIntegrityViolationException e) {
+                // A concurrent run created the open task between our lookup and insert (unique index): read it.
+                outcome = followUps.createDraft(appointment, requirementCode.trim(), lang, CURRENT_RUN.get());
+            }
             return new DraftResult(outcome.task().getId(), outcome.task().getStatus(),
                     outcome.created() ? "CREATED" : "EXISTING");
         });
