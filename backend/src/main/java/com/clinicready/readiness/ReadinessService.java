@@ -53,7 +53,7 @@ import com.clinicready.security.UserDirectory;
 public class ReadinessService {
 
     // shortcut: single-time-zone MVP; move to a per-clinic setting when clinics span zones.
-    static final ZoneId CLINIC_ZONE = ZoneId.of("Africa/Tunis");
+    public static final ZoneId CLINIC_ZONE = ZoneId.of("Africa/Tunis");
     /** Recalculate appointments from yesterday on: older ones no longer need a checklist. */
     private static final Duration RECALCULATION_WINDOW = Duration.ofDays(1);
 
