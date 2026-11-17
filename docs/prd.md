@@ -25,6 +25,14 @@ ClinicReady AI tells clinic staff, the day before, which appointments are admini
 | `EXPIRED` | A configured validity rule is not satisfied. |
 | `NOT_APPLICABLE` | The requirement does not apply to this appointment. |
 
+Aggregate (mandatory requirements only; optional ones stay visible but never block):
+
+- `INCOMPLETE`: a mandatory requirement is `MISSING` or `EXPIRED`. Wins over `NEEDS_REVIEW`; both reasons stay visible.
+- `NEEDS_REVIEW`: nothing mandatory is missing, but something mandatory needs human verification.
+- `READY`: administratively ready. Not a medical admission decision, not guaranteed coverage.
+
+Decisions (YOS-23): uncertain extraction is `NEEDS_REVIEW`, never `MISSING`. A document rejected by staff is confirmed non-compliance: reported as `MISSING` with a reason naming the rejection and the rejected document IDs as evidence. Engine: `backend/.../readiness/ReadinessEngine.java`.
+
 ## Permission matrix
 
 From the full PRD ("Users and permissions"). Every user is scoped to one clinic: a record of another clinic is reported as `404 NOT_FOUND`. A forbidden action returns `403 FORBIDDEN`. Enforced in services by `AuthorizationService` (`backend/.../security/Permission.java`), not only in controllers.
