@@ -24,7 +24,8 @@ import com.clinicready.security.Permission;
 /**
  * Requirement rules of the current user's clinic. Anyone who may read appointments may read rules
  * (readiness checks need them); only {@link Permission#REQUIREMENT_RULES_MANAGE} may change them.
- * Every change writes an audit event in the same transaction.
+ * Every change writes an audit event and recalculates readiness of the type's upcoming appointments in the
+ * same transaction.
  */
 @Service
 public class RequirementRuleService {
@@ -38,9 +39,12 @@ public class RequirementRuleService {
     private final CurrentUserService currentUser;
     private final AuthorizationService authorization;
     private final AuditService audit;
+    private final ReadinessService readiness;
 
     RequirementRuleService(RequirementRuleRepository rules, AppointmentService appointments,
-            CurrentUserService currentUser, AuthorizationService authorization, AuditService audit) {
+            CurrentUserService currentUser, AuthorizationService authorization, AuditService audit,
+            ReadinessService readiness) {
+        this.readiness = readiness;
         this.rules = rules;
         this.appointments = appointments;
         this.currentUser = currentUser;
@@ -74,6 +78,7 @@ public class RequirementRuleService {
         saveAndFlush(rule);
         audit.record(AuditAction.REQUIREMENT_RULE_CREATED, AUDIT_ENTITY, rule.getId(),
                 summary(rule, null, rule.snapshot()));
+        readiness.onRulesChanged(rule.getClinicId(), rule.getAppointmentTypeId());
         log.info("Requirement rule {} created for appointment type {}", rule.getId(), type.getId());
         return rule;
     }
@@ -99,6 +104,7 @@ public class RequirementRuleService {
         saveAndFlush(rule);
         audit.record(AuditAction.REQUIREMENT_RULE_UPDATED, AUDIT_ENTITY, rule.getId(),
                 summary(rule, before, rule.snapshot()));
+        readiness.onRulesChanged(rule.getClinicId(), rule.getAppointmentTypeId());
         log.info("Requirement rule {} updated", rule.getId());
         return rule;
     }
@@ -111,6 +117,7 @@ public class RequirementRuleService {
         rules.delete(rule);
         audit.record(AuditAction.REQUIREMENT_RULE_DELETED, AUDIT_ENTITY, rule.getId(),
                 summary(rule, rule.snapshot(), null));
+        readiness.onRulesChanged(rule.getClinicId(), rule.getAppointmentTypeId());
         log.info("Requirement rule {} deleted", rule.getId());
     }
 

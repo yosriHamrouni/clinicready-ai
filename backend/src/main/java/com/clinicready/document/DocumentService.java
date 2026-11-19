@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -117,6 +118,7 @@ public class DocumentService {
                     storageKey, currentUser.userId());
             documents.saveAndFlush(document);
             events.publishEvent(new DocumentUploaded(id)); // text extraction starts after commit
+            events.publishEvent(new PatientDocumentsChanged(clinicId, patientId));
             log.info("Document {} uploaded: patient={} category={} version={}", id, patientId,
                     request.category(), version);
             return document;
@@ -226,6 +228,7 @@ public class DocumentService {
         }
         row = metadata.saveAndFlush(row);
         audit.record(AuditAction.DOCUMENT_METADATA_UPDATED, "Document", id, Map.of("changedFields", changedFields));
+        events.publishEvent(new PatientDocumentsChanged(document.getClinicId(), document.getPatientId()));
         log.info("Document {} metadata updated: fields={}", id, changedFields);
         return Optional.of(row);
     }
@@ -234,6 +237,30 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public Optional<String> editorName(DocumentMetadata metadata) {
         return userDirectory.fullName(metadata.getUpdatedBy(), currentUser.clinicId());
+    }
+
+    /** What the readiness engine reads about one document: the AI observation and staff corrections may be null. */
+    public record DocumentFacts(Document document, DocumentExtraction extraction, DocumentMetadata metadata) {
+    }
+
+    /**
+     * The newest version of each of the patient's document categories, with its AI observation and staff
+     * corrections. A replaced version is no longer evidence. System read for readiness recalculation: no
+     * permission check, so callers must already be authorized for the patient or act as a system job.
+     */
+    @Transactional(readOnly = true)
+    public List<DocumentFacts> currentDocuments(UUID clinicId, UUID patientId) {
+        Map<DocumentCategory, Document> newest = new LinkedHashMap<>();
+        documents.findAllByClinicIdAndPatientIdOrderByCategoryAscVersionDesc(clinicId, patientId)
+                .forEach(d -> newest.putIfAbsent(d.getCategory(), d));
+        List<UUID> ids = newest.values().stream().map(Document::getId).toList();
+        Map<UUID, DocumentExtraction> observations = new HashMap<>();
+        extractions.findAllById(ids).forEach(e -> observations.put(e.getDocumentId(), e));
+        Map<UUID, DocumentMetadata> corrections = new HashMap<>();
+        metadata.findAllById(ids).forEach(m -> corrections.put(m.getDocumentId(), m));
+        return newest.values().stream()
+                .map(d -> new DocumentFacts(d, observations.get(d.getId()), corrections.get(d.getId())))
+                .toList();
     }
 
     /** Opens the file. The only way to read stored bytes: callers must pass the same checks as {@link #get}. */

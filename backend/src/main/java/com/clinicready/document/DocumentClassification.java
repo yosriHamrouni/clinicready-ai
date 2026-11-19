@@ -7,6 +7,7 @@ import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
@@ -64,11 +65,13 @@ class DocumentClassification {
     private final DocumentProperties documentProperties;
     private final TransactionTemplate transaction;
     private final Executor executor;
+    private final ApplicationEventPublisher events;
 
     DocumentClassification(DocumentRepository documents, DocumentTextRepository texts,
             DocumentExtractionRepository extractions, ExtractionModel model, ClassificationProperties properties,
             DocumentProperties documentProperties, TransactionTemplate transaction,
-            @Qualifier(DocumentConfig.EXTRACTION_EXECUTOR) Executor executor) {
+            @Qualifier(DocumentConfig.EXTRACTION_EXECUTOR) Executor executor, ApplicationEventPublisher events) {
+        this.events = events;
         this.documents = documents;
         this.texts = texts;
         this.extractions = extractions;
@@ -175,6 +178,7 @@ class DocumentClassification {
                 if (extraction.needsReview()) {
                     documents.markNeedsReview(document.getId());
                 }
+                events.publishEvent(new PatientDocumentsChanged(document.getClinicId(), document.getPatientId()));
             });
             log.info("Document {} classified: status={} reviewReason={} model={}", document.getId(),
                     extraction.getStatus(), extraction.getReviewReason(), extraction.getModelName());
