@@ -303,3 +303,57 @@ export interface FollowUpTask {
   updatedAt: string;
   approvals: FollowUpApproval[];
 }
+
+export type AgentRunStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'TOOL_LIMIT_EXCEEDED'
+  | 'TIMED_OUT'
+  | 'REPORT_MISMATCH';
+
+export const FINISHED_RUN_STATUSES: AgentRunStatus[] = [
+  'SUCCEEDED',
+  'FAILED',
+  'TOOL_LIMIT_EXCEEDED',
+  'TIMED_OUT',
+  'REPORT_MISMATCH',
+];
+
+/** The agent's final answer; counts come from the server, never from the model. */
+export interface AgentReport {
+  summary: string;
+  counts: { ready: number; needsReview: number; incomplete: number };
+  appointments: {
+    appointmentId: string;
+    status: AggregateStatus;
+    findings: { requirementCode: string; status: CheckStatus; action: string | null }[];
+  }[];
+}
+
+/** One tool call of a run, in order. */
+export interface AgentAction {
+  seq: number;
+  tool: string;
+  arguments: Record<string, unknown>;
+  resultStatus: string;
+  latencyMs: number;
+  tokens: number;
+  at: string;
+}
+
+export interface AgentRun {
+  id: string;
+  request: string;
+  status: AgentRunStatus;
+  statusReason: string | null;
+  report: AgentReport | null;
+  toolCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  actions: AgentAction[];
+}
