@@ -15,6 +15,7 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Label } from '../../components/ui/label';
 import { strings } from '../../lib/strings';
+import { frenchReason } from '../../lib/reasons';
 import { cn } from '../../lib/utils';
 
 const t = strings.agent;
@@ -141,7 +142,7 @@ function RunView({ runId }: { runId: string }) {
           {stopped && (
             <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm">
               <p className="font-semibold text-red-800">{t.statuses[r.status]}</p>
-              {r.statusReason && <p className="mt-1">{r.statusReason}</p>}
+              {r.statusReason && <p className="mt-1">{frenchReason(r.statusReason)}</p>}
               <p className="mt-1 text-muted-foreground">{t.stoppedHint}</p>
             </div>
           )}
@@ -269,7 +270,7 @@ function Report({ run }: { run: AgentRun }) {
             <ul className="space-y-1 text-sm">
               {proposed.map((f) => (
                 <li key={f.id} className="flex flex-wrap items-center gap-2">
-                  <span>{f.suggestedAction}</span>
+                  <span>{frenchReason(f.suggestedAction)}</span>
                   <Link to={`/follow-ups?task=${f.id}`} className="text-primary hover:underline">
                     {t.openFollowUp}
                   </Link>

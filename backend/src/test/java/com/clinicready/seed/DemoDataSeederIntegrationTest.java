@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.clinicready.IntegrationTest;
+import com.clinicready.document.DemoDocumentSeeder;
 
 /** The runner already seeded on startup (demo profile); here we re-run it and compare. */
 @IntegrationTest
@@ -26,6 +27,9 @@ class DemoDataSeederIntegrationTest {
 
     @Autowired
     DemoDataSeeder seeder;
+
+    @Autowired
+    DemoDocumentSeeder documentSeeder;
 
     private Map<String, Integer> counts() {
         return TABLES.stream().collect(java.util.stream.Collectors.toMap(t -> t,
@@ -65,5 +69,41 @@ class DemoDataSeederIntegrationTest {
         List<String> arabicNames = jdbc.queryForList(
                 "SELECT full_name FROM patient WHERE preferred_language = 'AR'", String.class);
         assertThat(arabicNames).hasSize(16).allSatisfy(n -> assertThat(n).matches(".*\\p{InArabic}.*"));
+    }
+
+    @Test
+    void seedsRequirementRulesForEveryAppointmentType() {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM requirement_rule", Integer.class))
+                .isEqualTo(DemoClinicConfig.RULES.size());
+        assertThat(jdbc.queryForObject(
+                "SELECT count(DISTINCT appointment_type_id) FROM requirement_rule", Integer.class)).isEqualTo(6);
+    }
+
+    @Test
+    void givesUpcomingAppointmentsExaminationsAndAnAdvanceButLeavesSomeBlank() {
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM appointment WHERE status = 'SCHEDULED' AND expected_examinations IS NOT NULL
+                    AND advance_amount IS NOT NULL""", Integer.class)).isGreaterThan(10);
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM appointment WHERE status = 'SCHEDULED' AND expected_examinations IS NULL""",
+                Integer.class)).isGreaterThan(0);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM appointment WHERE payment_confirmed_at IS NOT NULL",
+                Integer.class)).isGreaterThan(0);
+    }
+
+    @Test
+    void seedsReadableSyntheticDocumentsWithExtractionAndKeepsThemOnReSeed() {
+        int documents = jdbc.queryForObject("SELECT count(*) FROM document", Integer.class);
+        assertThat(documents).isGreaterThan(20);
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM document d JOIN document_extraction e ON e.document_id = d.id
+                    JOIN document_text t ON t.document_id = d.id""", Integer.class)).isEqualTo(documents);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM document_extraction WHERE review_reason = 'LOW_CONFIDENCE'", Integer.class))
+                .isGreaterThan(0);
+
+        documentSeeder.seed(DemoDataGenerator.generate(LocalDate.now(DemoDataGenerator.CLINIC_ZONE)));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM document", Integer.class)).isEqualTo(documents);
     }
 }

@@ -6,6 +6,7 @@ import type { FollowUpStatus } from '../../api/types';
 import { EmptyState } from '../../components/EmptyState';
 import { PageHeader } from '../../components/PageHeader';
 import { strings } from '../../lib/strings';
+import { frenchReason } from '../../lib/reasons';
 import { cn } from '../../lib/utils';
 import { FollowUpDetail } from './FollowUpDetail';
 import { FollowUpStatusBadge } from './badges';
@@ -90,7 +91,7 @@ export function FollowUpsPage() {
                       <span className="font-medium">{requirementLabel(task.requirementCode)}</span>
                       <FollowUpStatusBadge status={task.status} />
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{task.reason}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{frenchReason(task.reason)}</p>
                     {task.dueAt && (
                       <p className="mt-1 text-xs text-muted-foreground">
                         {t.dueOn(new Date(task.dueAt).toLocaleDateString('fr-FR'))}

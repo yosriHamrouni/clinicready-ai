@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { appointmentsApi } from '../../api/endpoints/appointments';
 import { followUpsApi } from '../../api/endpoints/followUps';
+import { frenchReason } from '../../lib/reasons';
 import { readinessApi, readinessKey } from '../../api/endpoints/readiness';
 import { PENDING_FOLLOW_UP_STATUSES, type AggregateStatus } from '../../api/types';
 import { AggregateBadge } from '../../components/AggregateBadge';
@@ -211,7 +212,7 @@ export function DashboardPage() {
                     {r === undefined ? '…' : <AggregateBadge status={r?.status ?? null} />}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {r && [...r.incompleteReasons, ...r.reviewReasons].join(' · ')}
+                    {r && [...r.incompleteReasons, ...r.reviewReasons].map(frenchReason).join(' · ')}
                   </td>
                 </tr>
               ))}

@@ -16,7 +16,7 @@ Commands marked **not run** come from the repository but were not executed in th
 - **Migrations:** Flyway runs automatically when the API starts (`V1` to `V14`, `backend/src/main/resources/db/migration`). There is no separate migrate command.
 - **Seed data:** Spring profiles, not scripts.
   - `dev`: one test clinic "Clinique Test Nabeul" and three users (`reception@clinic.test`, `doctor@clinic.test`, `manager@clinic.test`), Flyway repeatable script `db/seed-dev/R__dev_users.sql`. No appointments.
-  - `demo`: "Clinique Démo Nabeul", 40 patients, ~42 appointments around today (about 14 tomorrow), 6 appointment types, users `reception@`, `manager@`, `dr.bensalem@`, `dr.gharbi@` + `nabeul-demo.test`. Re-anchored to today on every API start. **No requirement rules and no documents.**
+  - `demo`: "Clinique Démo Nabeul", 40 patients, ~42 appointments around today (about 14 tomorrow), 6 appointment types, users `reception@`, `manager@`, `dr.bensalem@`, `dr.gharbi@` + `nabeul-demo.test`. Re-anchored to today on every API start. Also seeds, in French and idempotently: 17 requirement rules (`DemoClinicConfig`), expected examinations and an advance for most upcoming appointments (only ones staff have not edited), and 45 synthetic PDF documents with extraction results, giving a mix of ready, to-review and incomplete files (about 7 ready, 13 to review, 7 incomplete on a typical day).
   - Password for every seeded user: `password`.
 - **Swagger / OpenAPI: not available.** There is no springdoc dependency. `GET /v3/api-docs` returns 404 (verified). The API contract is in [`docs/api/`](docs/api/README.md).
 - **JDK:** this machine has no JDK 21, so the API runs in Docker and the tests run in a Maven container.
