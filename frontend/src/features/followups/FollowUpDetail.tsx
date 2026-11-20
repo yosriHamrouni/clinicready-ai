@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Label } from '../../components/ui/label';
 import { strings } from '../../lib/strings';
+import { frenchReason } from '../../lib/reasons';
 import { FollowUpStatusBadge } from './badges';
 import { requirementLabel } from './labels';
 
@@ -59,11 +60,11 @@ export function FollowUpDetail({ taskId }: { taskId: string }) {
         <CardContent className="space-y-3 text-sm">
           <div>
             <h3 className="font-semibold">{t.reason}</h3>
-            <p>{k.reason}</p>
+            <p>{frenchReason(k.reason)}</p>
           </div>
           <div>
             <h3 className="font-semibold">{t.suggestedAction}</h3>
-            <p>{k.suggestedAction}</p>
+            <p>{frenchReason(k.suggestedAction)}</p>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {k.runId && <span className="text-muted-foreground">{t.proposedByAgent}</span>}

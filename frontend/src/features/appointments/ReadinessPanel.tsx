@@ -4,6 +4,7 @@ import { readinessApi, readinessKey } from '../../api/endpoints/readiness';
 import type { ReadinessCheck } from '../../api/types';
 import { AggregateBadge } from '../../components/AggregateBadge';
 import { StatusBadge } from '../../components/StatusBadge';
+import { frenchReason } from '../../lib/reasons';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { formatDateTime } from '../../lib/dates';
@@ -61,7 +62,7 @@ export function ReadinessPanel({
         ) : (
           <>
             <p className="text-xs text-muted-foreground">
-              {readiness.data.notice} · {r.evaluatedAt(formatDateTime(readiness.data.evaluatedAt))}
+              {frenchReason(readiness.data.notice)} · {r.evaluatedAt(formatDateTime(readiness.data.evaluatedAt))}
             </p>
             <ul className="divide-y divide-border">
               {readiness.data.checks.map((check, i) => (
@@ -93,10 +94,10 @@ function CheckRow({ check, patientId }: { check: ReadinessCheck; patientId: stri
         </span>
         <StatusBadge status={check.status} />
       </div>
-      <p className="text-sm">{check.reason}</p>
+      <p className="text-sm">{frenchReason(check.reason)}</p>
       {check.remainingAction && (
         <p className="text-sm text-muted-foreground">
-          {r.nextStep} : {check.remainingAction}
+          {r.nextStep} : {frenchReason(check.remainingAction)}
         </p>
       )}
       {check.requirement === 'DOCUMENT' && (

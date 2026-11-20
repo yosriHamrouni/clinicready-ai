@@ -153,7 +153,8 @@ class PrepareTomorrowEndToEndTest {
                 Timestamp.class, first.id())).isAfter(before);
         String after = mvc.perform(get("/api/v1/appointments/{id}/readiness", first.id()).with(as(reception, clinic)))
                 .andReturn().getResponse().getContentAsString();
-        assertThat(JsonPath.<List<String>>read(after, "$.checks[?(@.requirement=='DOCUMENT')].status"))
+        // The demo clinic has its own rules now, so look at the consent form the test added a rule for.
+        assertThat(JsonPath.<List<String>>read(after, "$.checks[?(@.documentCategories[0]=='CONSENT_FORM')].status"))
                 .containsExactly("MISSING");
 
         // Audit trail: who did what, the run id on the agent's proposal.

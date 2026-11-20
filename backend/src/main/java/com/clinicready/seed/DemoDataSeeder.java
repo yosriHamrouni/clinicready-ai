@@ -3,9 +3,13 @@ package com.clinicready.seed;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,10 +134,80 @@ public class DemoDataSeeder {
                     ps.setString(7, a.status());
                 });
 
+        seedRequirementRules(data, clinicId);
+        int detailed = seedAdminDetails(data, clinicId);
+
         log.info("Demo seed applied: {} practitioners, {} users, {} appointment types, "
                         + "{} patients, {} appointments",
                 data.practitioners().size(), data.users().size(), data.appointmentTypes().size(),
                 data.patients().size(), data.appointments().size());
+        log.info("Demo rules: {} requirement rules, {} appointments given examinations and an advance",
+                DemoClinicConfig.RULES.size(), detailed);
+    }
+
+    private record RuleRow(UUID typeId, DemoClinicConfig.Rule rule) {}
+
+    /** The documents each appointment type needs. Updated in place on every start. */
+    private void seedRequirementRules(DemoData data, UUID clinicId) {
+        Map<String, UUID> typeIds = data.appointmentTypes().stream()
+                .collect(Collectors.toMap(DemoData.AppointmentType::code, DemoData.AppointmentType::id));
+        List<RuleRow> rows = new ArrayList<>();
+        for (DemoClinicConfig.Rule rule : DemoClinicConfig.RULES) {
+            UUID typeId = typeIds.get(rule.typeCode());
+            if (typeId != null) {
+                rows.add(new RuleRow(typeId, rule));
+            }
+        }
+        batch("""
+                INSERT INTO requirement_rule
+                    (id, clinic_id, appointment_type_id, document_category, mandatory, validity_days,
+                     needs_verification)
+                VALUES (?, ?, ?, ?, ?, ?, FALSE)
+                ON CONFLICT (id) DO UPDATE SET mandatory = EXCLUDED.mandatory,
+                    validity_days = EXCLUDED.validity_days, updated_at = now()""",
+                rows, (ps, r) -> {
+                    ps.setObject(1, r.rule().id());
+                    ps.setObject(2, clinicId);
+                    ps.setObject(3, r.typeId());
+                    ps.setString(4, r.rule().category());
+                    ps.setBoolean(5, r.rule().mandatory());
+                    ps.setObject(6, r.rule().validityDays());
+                });
+    }
+
+    /**
+     * Expected examinations and an advance for the upcoming appointments, as staff would have entered them;
+     * about half the advances are confirmed and one appointment in seven is left blank (readiness then asks
+     * for it). Only fills appointments staff have not touched, so edits made in the demo survive a restart.
+     */
+    private int seedAdminDetails(DemoData data, UUID clinicId) {
+        UUID reception = data.users().stream().filter(u -> u.role().equals("RECEPTIONIST")).map(DemoData.User::id)
+                .findFirst().orElseThrow();
+        Map<UUID, String> typeCodes = data.appointmentTypes().stream()
+                .collect(Collectors.toMap(DemoData.AppointmentType::id, DemoData.AppointmentType::code));
+        int updated = 0;
+        int index = 0;
+        for (DemoData.Appointment a : data.appointments()) {
+            if (!a.status().equals("SCHEDULED")) {
+                continue;
+            }
+            int i = index++;
+            if (i % 7 == 6) {
+                continue;
+            }
+            String code = typeCodes.get(a.appointmentTypeId());
+            String examinations = DemoClinicConfig.examinationsFor(code).stream()
+                    .map(e -> "\"" + e + "\"").collect(Collectors.joining(",", "[", "]"));
+            var advance = DemoClinicConfig.advanceFor(code);
+            boolean confirmed = advance.signum() > 0 && i % 2 == 0;
+            updated += jdbc.update("""
+                    UPDATE appointment SET expected_examinations = ?::jsonb, advance_amount = ?,
+                        payment_confirmed_by = ?, payment_confirmed_at = ?, updated_at = now()
+                    WHERE id = ? AND clinic_id = ? AND expected_examinations IS NULL AND advance_amount IS NULL""",
+                    examinations, advance, confirmed ? reception : null,
+                    confirmed ? Timestamp.from(Instant.now()) : null, a.id(), clinicId);
+        }
+        return updated;
     }
 
     private <T> void batch(String sql, List<T> rows, Binder<T> binder) {
