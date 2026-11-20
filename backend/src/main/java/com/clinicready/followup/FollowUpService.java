@@ -17,10 +17,13 @@ import com.clinicready.appointment.Appointment;
 import com.clinicready.appointment.AppointmentService;
 import com.clinicready.audit.AuditAction;
 import com.clinicready.audit.AuditService;
+import com.clinicready.clinic.Clinic;
+import com.clinicready.clinic.ClinicRepository;
 import com.clinicready.common.ConflictException;
 import com.clinicready.common.InvalidRequestException;
 import com.clinicready.common.Language;
 import com.clinicready.common.NotFoundException;
+import com.clinicready.patient.Patient;
 import com.clinicready.patient.PatientService;
 import com.clinicready.readiness.CheckStatus;
 import com.clinicready.readiness.ReadinessService;
@@ -45,6 +48,7 @@ import com.clinicready.security.Role;
 public class FollowUpService {
 
     static final String AUDIT_ENTITY = "FOLLOW_UP_TASK";
+    static final int MAX_DRAFT_LENGTH = 2000;
 
     private static final Logger log = LoggerFactory.getLogger(FollowUpService.class);
     private static final Set<CheckStatus> ACTIONABLE = Set.of(CheckStatus.MISSING, CheckStatus.NEEDS_REVIEW,
@@ -62,11 +66,18 @@ public class FollowUpService {
     private final AuthorizationService authorization;
     private final AuditService audit;
     private final FollowUpApprovalRepository approvals;
+    private final MessageDraftRepository drafts;
+    private final ReminderTemplates templates;
+    private final ClinicRepository clinics;
 
     FollowUpService(FollowUpTaskRepository tasks, AppointmentService appointments, PatientService patients,
             ReadinessService readiness, CurrentUserService currentUser, AuthorizationService authorization,
-            AuditService audit, FollowUpApprovalRepository approvals) {
+            AuditService audit, FollowUpApprovalRepository approvals, MessageDraftRepository drafts,
+            ReminderTemplates templates, ClinicRepository clinics) {
         this.approvals = approvals;
+        this.drafts = drafts;
+        this.templates = templates;
+        this.clinics = clinics;
         this.tasks = tasks;
         this.appointments = appointments;
         this.patients = patients;
@@ -110,13 +121,16 @@ public class FollowUpService {
         if (open.isPresent()) {
             return new DraftOutcome(open.get(), false);
         }
-        Language lang = language != null ? language
-                : patients.get(appointment.getPatientId()).getPreferredLanguage();
+        Patient patient = patients.get(appointment.getPatientId());
+        Language lang = language != null ? language : patient.getPreferredLanguage();
         FollowUpTask task = tasks.saveAndFlush(new FollowUpTask(appointment.getClinicId(), appointment.getId(),
                 appointment.getPatientId(), requirementCode, check.status(), check.reason(),
                 check.remainingAction(),
                 check.documents().stream().map(ReadinessCheckResponse.DocumentReference::documentId).toList(),
                 lang, appointment.getStartsAt(), currentUser.userId(), runId));
+        ReminderTemplates.Rendered text = templates.render(task, appointment.getStartsAt(), patient.getFullName(),
+                clinicName(task.getClinicId()));
+        drafts.save(new MessageDraft(task, text.body(), text.templateId()));
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("appointmentId", appointment.getId().toString());
         summary.put("requirementCode", requirementCode);
@@ -269,6 +283,51 @@ public class FollowUpService {
         changed(task, AuditAction.FOLLOW_UP_TASK_DELIVERED, summary);
         readiness.run(task.getAppointmentId());
         return view(task.getId());
+    }
+
+    /**
+     * The task's message draft. Tasks created before drafts existed get one built now (not stored).
+     *
+     * @throws NotFoundException task not visible
+     */
+    @Transactional(readOnly = true)
+    public MessageDraft draft(UUID taskId) {
+        FollowUpTask task = get(taskId);
+        return drafts.findByTaskId(task.getId()).orElseGet(() -> {
+            Appointment appointment = appointments.get(task.getAppointmentId());
+            ReminderTemplates.Rendered text = templates.render(task, appointment.getStartsAt(),
+                    patients.get(task.getPatientId()).getFullName(), clinicName(task.getClinicId()));
+            return new MessageDraft(task, text.body(), text.templateId());
+        });
+    }
+
+    /**
+     * Staff replace the draft text. Only while the task awaits a decision: an approval covers the text as it
+     * was when it was approved.
+     *
+     * @throws InvalidRequestException empty or longer than {@value #MAX_DRAFT_LENGTH} characters
+     * @throws ConflictException       {@code DRAFT_LOCKED} unless the task is AWAITING_APPROVAL
+     */
+    @Transactional
+    public MessageDraft editDraft(UUID taskId, String body) {
+        authorization.require(Permission.FOLLOWUP_APPROVE);
+        FollowUpTask task = get(taskId);
+        if (task.getStatus() != FollowUpStatus.AWAITING_APPROVAL) {
+            throw new ConflictException("DRAFT_LOCKED", "A " + task.getStatus() + " task's draft cannot change");
+        }
+        String text = body == null ? "" : body.strip();
+        if (text.isEmpty() || text.length() > MAX_DRAFT_LENGTH) {
+            throw new InvalidRequestException("A draft is 1 to " + MAX_DRAFT_LENGTH + " characters");
+        }
+        MessageDraft draft = draft(taskId);
+        draft.edit(text, currentUser.userId());
+        drafts.saveAndFlush(draft);
+        audit.record(AuditAction.FOLLOW_UP_DRAFT_EDITED, AUDIT_ENTITY, task.getId(), Map.of("length", text.length()));
+        return draft;
+    }
+
+    private String clinicName(UUID clinicId) {
+        return clinics.findById(clinicId).map(Clinic::getName).orElse("");
     }
 
     private static void requireTransition(FollowUpTask task, FollowUpStatus next) {
