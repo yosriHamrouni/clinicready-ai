@@ -9,6 +9,7 @@ import { AppointmentsPage } from '../features/appointments/AppointmentsPage';
 import { AppointmentDetailPage } from '../features/appointments/AppointmentDetailPage';
 import { AgentWorkspacePage } from '../features/agent/AgentWorkspacePage';
 import { FollowUpsPage } from '../features/followups/FollowUpsPage';
+import { AuditPage } from '../features/audit/AuditPage';
 import { RequirementRulesPage } from '../features/settings/RequirementRulesPage';
 import { NotFoundPage } from '../features/NotFoundPage';
 
@@ -28,6 +29,7 @@ export const routes: RouteObject[] = [
           { path: '/appointments/:id', element: <AppointmentDetailPage /> },
           { path: '/agent', element: <AgentWorkspacePage /> },
           { path: '/follow-ups', element: <FollowUpsPage /> },
+          { path: '/audit', element: <AuditPage /> },
           { path: '/settings/requirements', element: <RequirementRulesPage /> },
         ],
       },

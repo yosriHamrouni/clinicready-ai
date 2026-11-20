@@ -28,6 +28,9 @@ import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 
+import com.clinicready.audit.AuditAction;
+import com.clinicready.audit.AuditRunContext;
+import com.clinicready.audit.AuditService;
 import com.clinicready.common.ApiException;
 import com.clinicready.readiness.AggregateStatus;
 import com.clinicready.readiness.CheckStatus;
@@ -94,10 +97,12 @@ class AgentOrchestrator {
     private final ReadinessService readiness;
     private final AgentRunRepository runs;
     private final AgentActionRepository actions;
+    private final AuditService audit;
     private final ObjectMapper json;
 
     AgentOrchestrator(AgentChat chat, AgentTools tools, ReadinessService readiness, AgentRunRepository runs,
-            AgentActionRepository actions, ObjectMapper json) {
+            AgentActionRepository actions, AuditService audit, ObjectMapper json) {
+        this.audit = audit;
         this.chat = chat;
         this.tools = tools;
         this.readiness = readiness;
@@ -113,6 +118,8 @@ class AgentOrchestrator {
         runs.save(run); // merge: this instance stays the working copy
         Outcome outcome;
         AgentTools.CURRENT_RUN.set(runId);
+        AuditRunContext.set(runId);
+        recordRunEvent(AuditAction.AGENT_RUN_STARTED, runId, Map.of());
         try {
             outcome = loop(run, limits, Instant.now().plus(limits.timeout()));
         } catch (RuntimeException e) {
@@ -120,9 +127,12 @@ class AgentOrchestrator {
             outcome = new Outcome(AgentRun.Status.FAILED, "Unexpected error: " + e.getClass().getSimpleName(), null);
         } finally {
             AgentTools.CURRENT_RUN.remove();
+            AuditRunContext.clear();
         }
         run.finish(outcome.status(), outcome.reason(), outcome.report());
         runs.save(run);
+        recordRunEvent(AuditAction.AGENT_RUN_FINISHED, runId,
+                Map.of("status", outcome.status().name(), "toolCalls", run.getToolCalls()));
         log.info("Agent run {} finished: {} toolCalls={} tokens={}", runId, outcome.status(), run.getToolCalls(),
                 run.getPromptTokens() + run.getCompletionTokens());
     }
@@ -187,6 +197,8 @@ class AgentOrchestrator {
                     run.countCall();
                     actions.save(new AgentAction(run, ++seq, call.name(), redact(call.arguments()), attempt.status(),
                             attempt.latencyMs(), turnTokens));
+                    recordRunEvent(AuditAction.AGENT_TOOL_CALLED, run.getId(),
+                            Map.of("tool", call.name(), "seq", seq, "resultStatus", attempt.status()));
                     turnTokens = 0;
                     if (!attempt.failed()) {
                         break;
@@ -204,6 +216,18 @@ class AgentOrchestrator {
             }
             runs.save(run); // merge: this instance stays the working copy
             messages.add(new ToolResponseMessage(results));
+        }
+    }
+
+    /**
+     * Audits the run itself: start, each tool call (name and outcome only; arguments stay in agent_action) and
+     * the end. A failure here is logged and never ends the run.
+     */
+    private void recordRunEvent(AuditAction action, UUID runId, Map<String, Object> summary) {
+        try {
+            audit.recordRunEvent(action, runId, summary);
+        } catch (RuntimeException e) {
+            log.error("Agent run {}: could not record {} ({})", runId, action, e.getClass().getSimpleName());
         }
     }
 

@@ -5,6 +5,7 @@ import { Bot } from 'lucide-react';
 import { agentRunsApi } from '../../api/endpoints/agentRuns';
 import { followUpsApi } from '../../api/endpoints/followUps';
 import { FINISHED_RUN_STATUSES, type AgentRun } from '../../api/types';
+import { useAuth } from '../../auth/useAuth';
 import { AggregateBadge } from '../../components/AggregateBadge';
 import { EmptyState } from '../../components/EmptyState';
 import { PageHeader } from '../../components/PageHeader';
@@ -100,6 +101,8 @@ const isFinished = (run: AgentRun | undefined) =>
   !!run && FINISHED_RUN_STATUSES.includes(run.status);
 
 function RunView({ runId }: { runId: string }) {
+  const { hasRole } = useAuth();
+  const hasAuditAccess = hasRole('CLINIC_MANAGER') || hasRole('RECEPTIONIST');
   const run = useQuery({
     queryKey: ['agent-run', runId],
     queryFn: () => agentRunsApi.get(runId),
@@ -143,6 +146,11 @@ function RunView({ runId }: { runId: string }) {
             </div>
           )}
           <Timeline run={r} />
+          {isFinished(r) && hasAuditAccess && (
+            <Link to={`/audit?runId=${r.id}`} className="text-sm text-primary hover:underline">
+              {t.auditTrail}
+            </Link>
+          )}
         </CardContent>
       </Card>
       {r.status === 'SUCCEEDED' && r.report && <Report run={r} />}

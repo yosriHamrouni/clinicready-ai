@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type { AgentRun, FollowUpTask, Readiness } from '../api/types';
+import type { AgentRun, AuditEvent, FollowUpTask, Readiness } from '../api/types';
 
 // Synthetic readiness results and follow-up tasks for the mock appointments.
 const NOTICE =
@@ -150,6 +150,43 @@ let readiness = initialReadiness();
 let tasks = initialTasks();
 let runs = new Map<string, AgentRun>();
 
+// Synthetic audit events, newest first.
+const MOCK_AUDIT_EVENTS: AuditEvent[] = [
+  {
+    id: 'audit-003',
+    action: 'AGENT_RUN_FINISHED',
+    entityType: 'AGENT_RUN',
+    entityId: 'run-1',
+    actorUserId: 'user-001',
+    actorName: 'Sarra Test',
+    runId: 'run-1',
+    changeSummary: { status: 'SUCCEEDED', toolCalls: 2 },
+    occurredAt: '2026-11-20T09:00:05Z',
+  },
+  {
+    id: 'audit-002',
+    action: 'AGENT_TOOL_CALLED',
+    entityType: 'AGENT_RUN',
+    entityId: 'run-1',
+    actorUserId: 'user-001',
+    actorName: 'Sarra Test',
+    runId: 'run-1',
+    changeSummary: { tool: 'checkReadiness', seq: 1, resultStatus: 'OK' },
+    occurredAt: '2026-11-20T09:00:03Z',
+  },
+  {
+    id: 'audit-001',
+    action: 'PATIENT_CREATED',
+    entityType: 'PATIENT',
+    entityId: 'patient-001',
+    actorUserId: null,
+    actorName: null,
+    runId: null,
+    changeSummary: { patientRef: 'P-0001' },
+    occurredAt: '2026-11-19T15:30:00Z',
+  },
+];
+
 export function resetMockWorkflow(): void {
   readiness = initialReadiness();
   tasks = initialTasks();
@@ -198,6 +235,13 @@ export const workflowHandlers = [
     const next = { ...result, evaluatedAt: new Date().toISOString() };
     readiness.set(id, next);
     return HttpResponse.json(next);
+  }),
+
+  http.get('*/audit-events', ({ request }) => {
+    const params = new URL(request.url).searchParams;
+    const runId = params.get('runId');
+    const items = MOCK_AUDIT_EVENTS.filter((e) => !runId || e.runId === runId);
+    return HttpResponse.json({ items, page: 0, size: 25, total: items.length });
   }),
 
   http.get('*/follow-up-tasks', ({ request }) => {

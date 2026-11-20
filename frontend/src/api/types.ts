@@ -357,3 +357,24 @@ export interface AgentRun {
   finishedAt: string | null;
   actions: AgentAction[];
 }
+
+/** One recorded change. `actorName` is null for changes made by the system. */
+export interface AuditEvent {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  runId: string | null;
+  /** Ids and field values only; never document text or patient identity details. */
+  changeSummary: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface AuditEventPage {
+  items: AuditEvent[];
+  page: number;
+  size: number;
+  total: number;
+}
