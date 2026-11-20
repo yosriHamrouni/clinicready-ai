@@ -54,7 +54,7 @@ public class AuditEvent {
     }
 
     AuditEvent(UUID clinicId, UUID actorUserId, AuditAction action, String entityType, UUID entityId,
-            Map<String, Object> changeSummary) {
+            Map<String, Object> changeSummary, UUID runId) {
         this.id = UUID.randomUUID();
         this.clinicId = clinicId;
         this.actorUserId = actorUserId;
@@ -62,6 +62,7 @@ public class AuditEvent {
         this.entityType = entityType;
         this.entityId = entityId;
         this.changeSummary = changeSummary;
+        this.runId = runId;
         this.occurredAt = Instant.now();
     }
 

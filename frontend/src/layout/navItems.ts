@@ -4,6 +4,7 @@ import {
   FileCheck,
   LayoutDashboard,
   ListChecks,
+  ScrollText,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -24,6 +25,12 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/appointments', label: strings.nav.appointments, icon: CalendarDays },
   { to: '/agent', label: strings.nav.agent, icon: Bot },
   { to: '/follow-ups', label: strings.nav.followUps, icon: ListChecks },
+  {
+    to: '/audit',
+    label: strings.nav.audit,
+    icon: ScrollText,
+    roles: ['CLINIC_MANAGER', 'RECEPTIONIST'],
+  },
   {
     to: '/settings/requirements',
     label: strings.nav.requirements,

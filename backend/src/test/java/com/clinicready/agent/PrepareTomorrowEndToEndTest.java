@@ -166,6 +166,27 @@ class PrepareTomorrowEndToEndTest {
         assertThat(trail.get(0).get("run_id")).isEqualTo(runId.toString());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM agent_action WHERE run_id = ?", Integer.class, runId))
                 .isEqualTo(targets.size() + 2);
+
+        // The run itself is audited, and every change it made carries its id.
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE run_id = ? AND action = 'AGENT_RUN_STARTED'", Integer.class,
+                runId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE run_id = ? AND action = 'AGENT_RUN_FINISHED'", Integer.class,
+                runId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM audit_event WHERE run_id = ? AND action = 'AGENT_TOOL_CALLED'", Integer.class,
+                runId)).isEqualTo(targets.size() + 2);
+        assertThat(jdbc.queryForObject(
+                "SELECT run_id FROM audit_event WHERE entity_id = ? AND action = 'FOLLOW_UP_TASK_CREATED'",
+                UUID.class, task)).isEqualTo(runId);
+        assertThat(jdbc.queryForObject(
+                "SELECT run_id FROM audit_event WHERE entity_id = ? AND action = 'FOLLOW_UP_TASK_APPROVED'",
+                UUID.class, task)).as("a human's approval is not part of the run").isNull();
+        String viaApi = mvc.perform(get("/api/v1/audit-events").param("runId", runId.toString())
+                        .with(as(manager, clinic)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<Integer>read(viaApi, "$.total")).isEqualTo(targets.size() + 2 + 2 + 1);
     }
 
     private String awaitFinished(UUID runId, DemoData.User user, UUID clinic) throws Exception {
