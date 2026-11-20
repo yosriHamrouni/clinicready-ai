@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { CircleAlert, CircleCheck, CircleDashed, FileText } from 'lucide-react';
 import { documentsApi } from '../../api/endpoints/documents';
 import {
@@ -44,7 +45,9 @@ export function PatientDocuments({ patientId }: { patientId: string }) {
     queryKey: ['documents', { patientId }],
     queryFn: () => documentsApi.listForPatient(patientId),
   });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // ?document=<id> preselects an evidence document linked from a readiness check.
+  const [params] = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(params.get('document'));
 
   return (
     <Card>
