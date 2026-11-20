@@ -378,3 +378,14 @@ export interface AuditEventPage {
   size: number;
   total: number;
 }
+
+/** The message staff send for a task. `editedBy` is null while the text is as generated. */
+export interface MessageDraft {
+  taskId: string;
+  language: Language;
+  body: string;
+  templateId: string | null;
+  editedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
