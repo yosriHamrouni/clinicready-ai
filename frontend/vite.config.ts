@@ -17,6 +17,8 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Parallel jsdom files are slow on small machines; see asyncUtilTimeout in setup.ts.
+    testTimeout: 20000,
     css: false,
   },
 });

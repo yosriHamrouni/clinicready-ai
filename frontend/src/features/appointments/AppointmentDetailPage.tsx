@@ -21,6 +21,7 @@ import { formatDateTime } from '../../lib/dates';
 import { strings } from '../../lib/strings';
 import { isWellFormedEmail, isWellFormedPhone } from '../../lib/validation';
 import { AppointmentStatusBadge, ChecklistItemBadge } from './badges';
+import { ReadinessPanel } from './ReadinessPanel';
 import { selectClass } from './styles';
 
 const t = strings.appointments;
@@ -75,6 +76,7 @@ function AppointmentDetail({ appointment: a }: { appointment: Appointment }) {
           {a.patient.patientRef}
         </Link>
       </p>
+      <ReadinessPanel appointmentId={a.id} patientId={a.patient.id} canRun={canWrite} />
       <Card>
         <CardHeader>
           <CardTitle>{c.title}</CardTitle>
@@ -167,6 +169,8 @@ function AdminDetailsForm({
   const onUpdated = (updated: Appointment) => {
     queryClient.setQueryData(appointmentKey(updated.id), updated);
     void queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    // The backend recalculates readiness when the checklist changes.
+    void queryClient.invalidateQueries({ queryKey: ['readiness', updated.id] });
   };
   const save = useMutation({
     mutationFn: (body: AdminDetailsInput) =>

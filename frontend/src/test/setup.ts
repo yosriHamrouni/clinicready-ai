@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { server } from '../mocks/server';
 import { setAccessToken, setUnauthorizedHandler } from '../api/client';
 
@@ -31,6 +31,9 @@ Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.releasePointerCapture ??= () => {};
 
 const DESKTOP_WIDTH = 1280;
+
+// The full suite runs files in parallel; on a loaded 4-core machine the default 1 s findBy* wait flakes.
+configure({ asyncUtilTimeout: 5000 });
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {

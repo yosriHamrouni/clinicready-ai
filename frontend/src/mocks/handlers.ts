@@ -15,6 +15,7 @@ import type {
   RequirementRule,
   RequirementRuleInput,
 } from '../api/types';
+import { resetMockWorkflow, workflowHandlers } from './workflow';
 
 // Synthetic data only.
 export const MOCK_USER: CurrentUser = {
@@ -200,6 +201,7 @@ export function resetMockClinicData(): void {
   appointments = initialAppointments();
   documents = initialDocuments();
   documentMetadata = new Map();
+  resetMockWorkflow();
 }
 
 function sameContact(a: AdminDetails['trustedContact'], b: AdminDetailsInput['trustedContact']) {
@@ -258,6 +260,8 @@ function takenCategory(typeId: string, body: RequirementRuleInput, exceptId?: st
 
 // Wildcard prefix keeps handlers independent of VITE_API_BASE_URL.
 export const handlers = [
+  ...workflowHandlers,
+
   http.post('*/auth/login', async ({ request }) => {
     const body = (await request.json()) as { email?: string; password?: string };
     if (body.email === MOCK_USER.email && body.password === 'password') {

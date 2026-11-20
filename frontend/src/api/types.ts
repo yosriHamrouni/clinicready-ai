@@ -210,3 +210,150 @@ export interface DocumentMetadata {
 export interface MetadataPatch {
   fields: Partial<Record<MetadataFieldKey, string | null>>;
 }
+
+export type AggregateStatus = 'READY' | 'INCOMPLETE' | 'NEEDS_REVIEW';
+export type CheckStatus = 'PRESENT' | 'MISSING' | 'NEEDS_REVIEW' | 'EXPIRED' | 'NOT_APPLICABLE';
+export type RequirementKind = 'DOCUMENT' | 'EXPECTED_EXAMINATIONS' | 'ADVANCE_PAYMENT';
+
+/** One requirement of GET /appointments/{id}/readiness. */
+export interface ReadinessCheck {
+  ruleId: string | null;
+  requirement: RequirementKind;
+  documentCategories: DocumentCategory[];
+  mandatory: boolean;
+  applicable: boolean;
+  status: CheckStatus;
+  reason: string;
+  remainingAction: string | null;
+  requiresHumanReview: boolean;
+  documents: {
+    documentId: string;
+    category: DocumentCategory;
+    version: number;
+    status: DocumentStatus;
+    uploadedAt: string;
+  }[];
+  confirmations: {
+    type: string;
+    confirmedBy: string;
+    confirmedByName: string | null;
+    confirmedAt: string;
+  }[];
+}
+
+/** GET /appointments/{id}/readiness (404 until a check has run). */
+export interface Readiness {
+  appointmentId: string;
+  status: AggregateStatus;
+  notice: string;
+  evaluatedAt: string;
+  incompleteReasons: string[];
+  reviewReasons: string[];
+  checks: ReadinessCheck[];
+}
+
+export type FollowUpStatus =
+  'PROPOSED' | 'AWAITING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DELIVERED' | 'RESOLVED';
+
+export const FOLLOW_UP_STATUSES: FollowUpStatus[] = [
+  'PROPOSED',
+  'AWAITING_APPROVAL',
+  'APPROVED',
+  'REJECTED',
+  'DELIVERED',
+  'RESOLVED',
+];
+
+/** Waiting on staff: not yet delivered, not closed. */
+export const PENDING_FOLLOW_UP_STATUSES: FollowUpStatus[] = [
+  'PROPOSED',
+  'AWAITING_APPROVAL',
+  'APPROVED',
+];
+
+export interface FollowUpApproval {
+  id: string;
+  decision: 'APPROVED' | 'REJECTED';
+  actorId: string;
+  comment: string | null;
+  decidedAt: string;
+}
+
+/** A follow-up task. `approvals` is filled on single-task reads and empty in lists. */
+export interface FollowUpTask {
+  id: string;
+  appointmentId: string;
+  patientId: string;
+  requirementCode: string;
+  status: FollowUpStatus;
+  checkStatus: CheckStatus;
+  reason: string;
+  suggestedAction: string;
+  evidenceDocumentIds: string[];
+  language: Language;
+  dueAt: string | null;
+  createdBy: string | null;
+  runId: string | null;
+  approvalId: string | null;
+  deliveredAt: string | null;
+  deliveredBy: string | null;
+  deliveredByRun: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  approvals: FollowUpApproval[];
+}
+
+export type AgentRunStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'TOOL_LIMIT_EXCEEDED'
+  | 'TIMED_OUT'
+  | 'REPORT_MISMATCH';
+
+export const FINISHED_RUN_STATUSES: AgentRunStatus[] = [
+  'SUCCEEDED',
+  'FAILED',
+  'TOOL_LIMIT_EXCEEDED',
+  'TIMED_OUT',
+  'REPORT_MISMATCH',
+];
+
+/** The agent's final answer; counts come from the server, never from the model. */
+export interface AgentReport {
+  summary: string;
+  counts: { ready: number; needsReview: number; incomplete: number };
+  appointments: {
+    appointmentId: string;
+    status: AggregateStatus;
+    findings: { requirementCode: string; status: CheckStatus; action: string | null }[];
+  }[];
+}
+
+/** One tool call of a run, in order. */
+export interface AgentAction {
+  seq: number;
+  tool: string;
+  arguments: Record<string, unknown>;
+  resultStatus: string;
+  latencyMs: number;
+  tokens: number;
+  at: string;
+}
+
+export interface AgentRun {
+  id: string;
+  request: string;
+  status: AgentRunStatus;
+  statusReason: string | null;
+  report: AgentReport | null;
+  toolCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  actions: AgentAction[];
+}
