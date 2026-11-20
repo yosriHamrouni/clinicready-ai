@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type { AgentRun, AuditEvent, FollowUpTask, Readiness } from '../api/types';
+import type { AgentRun, AuditEvent, FollowUpTask, MessageDraft, Readiness } from '../api/types';
 
 // Synthetic readiness results and follow-up tasks for the mock appointments.
 const NOTICE =
@@ -187,7 +187,71 @@ const MOCK_AUDIT_EVENTS: AuditEvent[] = [
   },
 ];
 
+const MOCK_ACTOR = 'user-001';
+const OPEN_STATUSES = ['PROPOSED', 'AWAITING_APPROVAL', 'APPROVED', 'DELIVERED'];
+
+const initialDrafts = (): Map<string, MessageDraft> =>
+  new Map([
+    [
+      'task-001',
+      {
+        taskId: 'task-001',
+        language: 'FR',
+        body: "Bonjour, il manque votre carte d'assurance pour votre rendez-vous. Merci de nous l'envoyer.",
+        templateId: null,
+        editedBy: null,
+        createdAt: '2026-11-10T10:01:00Z',
+        updatedAt: '2026-11-10T10:01:00Z',
+      },
+    ],
+  ]);
+
+let drafts = initialDrafts();
+
+/** Applies a legal status change like the API: anything else is 409 INVALID_TRANSITION. */
+function transition(
+  id: string,
+  from: FollowUpTask['status'],
+  to: FollowUpTask['status'],
+  comment: string | null,
+) {
+  const index = tasks.findIndex((t) => t.id === id);
+  if (index < 0) return notFound();
+  const task = tasks[index];
+  if (task.status !== from) {
+    return HttpResponse.json(
+      { code: 'INVALID_TRANSITION', message: `A ${task.status} task cannot become ${to}` },
+      { status: 409 },
+    );
+  }
+  const now = new Date().toISOString();
+  const decided = to === 'APPROVED' || to === 'REJECTED';
+  const next: FollowUpTask = {
+    ...task,
+    status: to,
+    updatedAt: now,
+    deliveredAt: to === 'DELIVERED' ? now : task.deliveredAt,
+    deliveredBy: to === 'DELIVERED' ? MOCK_ACTOR : task.deliveredBy,
+    resolvedAt: to === 'RESOLVED' ? now : task.resolvedAt,
+    approvals: decided
+      ? [
+          ...task.approvals,
+          {
+            id: `approval-${task.approvals.length + 1}`,
+            decision: to,
+            actorId: MOCK_ACTOR,
+            comment,
+            decidedAt: now,
+          },
+        ]
+      : task.approvals,
+  };
+  tasks[index] = next;
+  return HttpResponse.json(next);
+}
+
 export function resetMockWorkflow(): void {
+  drafts = initialDrafts();
   readiness = initialReadiness();
   tasks = initialTasks();
   runs = new Map();
@@ -248,10 +312,12 @@ export const workflowHandlers = [
     const params = new URL(request.url).searchParams;
     const statuses = params.get('status')?.split(',') ?? [];
     const appointmentId = params.get('appointmentId');
+    // Like the API: no status means every open task.
+    const wanted = statuses.length > 0 ? statuses : OPEN_STATUSES;
     return HttpResponse.json(
       tasks
         .filter((t) => !appointmentId || t.appointmentId === appointmentId)
-        .filter((t) => statuses.length === 0 || statuses.includes(t.status))
+        .filter((t) => appointmentId || wanted.includes(t.status))
         .map((t) => ({ ...t, approvals: [] })),
     );
   }),
@@ -260,4 +326,54 @@ export const workflowHandlers = [
     const task = tasks.find((t) => t.id === params.id);
     return task ? HttpResponse.json(task) : notFound();
   }),
+
+  http.get('*/follow-up-tasks/:id/draft', ({ params }) => {
+    const draft = drafts.get(String(params.id));
+    return draft ? HttpResponse.json(draft) : notFound();
+  }),
+
+  http.put('*/follow-up-tasks/:id/draft', async ({ params, request }) => {
+    const task = tasks.find((t) => t.id === params.id);
+    const draft = drafts.get(String(params.id));
+    if (!task || !draft) return notFound();
+    if (task.status !== 'AWAITING_APPROVAL') {
+      return HttpResponse.json(
+        { code: 'DRAFT_LOCKED', message: 'The draft can no longer be edited' },
+        { status: 409 },
+      );
+    }
+    const body = ((await request.json()) as { body?: string }).body ?? '';
+    const next: MessageDraft = {
+      ...draft,
+      body,
+      editedBy: MOCK_ACTOR,
+      updatedAt: new Date().toISOString(),
+    };
+    drafts.set(task.id, next);
+    return HttpResponse.json(next);
+  }),
+
+  http.post('*/follow-up-tasks/:id/approve', async ({ params, request }) => {
+    const comment = ((await request.json().catch(() => ({}))) as { comment?: string }).comment ?? null;
+    return transition(String(params.id), 'AWAITING_APPROVAL', 'APPROVED', comment);
+  }),
+
+  http.post('*/follow-up-tasks/:id/reject', async ({ params, request }) => {
+    const comment = ((await request.json().catch(() => ({}))) as { comment?: string }).comment?.trim();
+    if (!comment) {
+      return HttpResponse.json(
+        { code: 'VALIDATION_ERROR', message: 'A comment is required to reject' },
+        { status: 400 },
+      );
+    }
+    return transition(String(params.id), 'AWAITING_APPROVAL', 'REJECTED', comment);
+  }),
+
+  http.post('*/follow-up-tasks/:id/delivered', ({ params }) =>
+    transition(String(params.id), 'APPROVED', 'DELIVERED', null),
+  ),
+
+  http.post('*/follow-up-tasks/:id/resolve', ({ params }) =>
+    transition(String(params.id), 'DELIVERED', 'RESOLVED', null),
+  ),
 ];
