@@ -47,3 +47,8 @@ should be added when the features exist:
 ## Metrics
 
 Readiness accuracy · agent report fidelity · extraction accuracy · tool-call success rate · duplicate task rate · approval enforcement · recovery · cost and latency.
+
+Results so far: [`report.md`](report.md). The first run (YOS-39) used a scripted stand-in for the model, so it
+measures the system around the model (readiness, report cross-check, duplicates, approvals) and not the model
+itself. Extraction accuracy, real agent behaviour, cost and latency are still to measure with a real model.
+Re-run with `EVAL_WRITE_RESULTS=1 ./mvnw test -Dtest=EvalRunIntegrationTest` from `backend/`.
