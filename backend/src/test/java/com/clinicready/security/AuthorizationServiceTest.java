@@ -22,6 +22,7 @@ class AuthorizationServiceTest {
             "RECEPTIONIST,    DOCUMENT_READ,            true",
             "RECEPTIONIST,    DOCUMENT_UPLOAD,          true",
             "RECEPTIONIST,    DOCUMENT_METADATA_EDIT,   true",
+            "RECEPTIONIST,   DOCUMENT_REVIEW,          true",
             "RECEPTIONIST,    AGENT_RUN,                true",
             "RECEPTIONIST,    FOLLOWUP_APPROVE,         true",
             "RECEPTIONIST,    REQUIREMENT_RULES_MANAGE, false",
@@ -35,6 +36,7 @@ class AuthorizationServiceTest {
             "PRACTITIONER,    DOCUMENT_READ,            true",
             "PRACTITIONER,    DOCUMENT_UPLOAD,          false",
             "PRACTITIONER,    DOCUMENT_METADATA_EDIT,   true",
+            "PRACTITIONER,   DOCUMENT_REVIEW,          false",
             "PRACTITIONER,    AGENT_RUN,                true",
             "PRACTITIONER,    FOLLOWUP_APPROVE,         false",
             "PRACTITIONER,    REQUIREMENT_RULES_MANAGE, false",
@@ -48,6 +50,7 @@ class AuthorizationServiceTest {
             "CLINIC_MANAGER,  DOCUMENT_READ,            true",
             "CLINIC_MANAGER,  DOCUMENT_UPLOAD,          true",
             "CLINIC_MANAGER,  DOCUMENT_METADATA_EDIT,   true",
+            "CLINIC_MANAGER, DOCUMENT_REVIEW,          true",
             "CLINIC_MANAGER,  AGENT_RUN,                true",
             "CLINIC_MANAGER,  FOLLOWUP_APPROVE,         true",
             "CLINIC_MANAGER,  REQUIREMENT_RULES_MANAGE, true",
@@ -69,7 +72,7 @@ class AuthorizationServiceTest {
 
     @Test
     void everyRoleAndPermissionIsCoveredAbove() {
-        assertThat(Role.values().length * Permission.values().length).isEqualTo(39);
+        assertThat(Role.values().length * Permission.values().length).isEqualTo(42);
     }
 
     private static AuthorizationService serviceFor(Role role) {

@@ -72,7 +72,39 @@ public class Document {
     @Column(name = "extracted_at", insertable = false, updatable = false)
     private Instant extractedAt;
 
+    @Column(name = "review_note")
+    private String reviewNote;
+
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
     protected Document() {
+    }
+
+    /** Staff decision on the document. The note is the rejection reason; it is cleared on verification. */
+    void review(DocumentStatus decision, String note, UUID by) {
+        if (decision != DocumentStatus.VERIFIED && decision != DocumentStatus.REJECTED) {
+            throw new IllegalArgumentException("Not a review decision: " + decision);
+        }
+        this.status = decision;
+        this.reviewNote = decision == DocumentStatus.REJECTED ? note : null;
+        this.reviewedBy = by;
+        this.reviewedAt = Instant.now();
+    }
+
+    public String getReviewNote() {
+        return reviewNote;
+    }
+
+    public UUID getReviewedBy() {
+        return reviewedBy;
+    }
+
+    public Instant getReviewedAt() {
+        return reviewedAt;
     }
 
     Document(UUID id, UUID clinicId, UUID patientId, DocumentCategory category, DocumentSource source,

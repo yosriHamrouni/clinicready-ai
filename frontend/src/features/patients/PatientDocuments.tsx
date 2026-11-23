@@ -2,15 +2,21 @@ import { useId, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { CircleAlert, CircleCheck, CircleDashed, FileText } from 'lucide-react';
+import { ApiError } from '../../api/client';
 import { documentsApi } from '../../api/endpoints/documents';
 import {
+  DOCUMENT_CATEGORIES,
+  DOCUMENT_SOURCES,
   METADATA_FIELDS,
+  type DocumentCategory,
   type DocumentMetadata,
+  type DocumentSource,
   type ExtractionStatus,
   type MetadataFieldKey,
   type MetadataFields,
   type PatientDocument,
 } from '../../api/types';
+import { useAuth } from '../../auth/useAuth';
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -24,6 +30,7 @@ import { cn } from '../../lib/utils';
 const t = strings.documents;
 const DATE_FIELDS: ReadonlySet<MetadataFieldKey> = new Set(['documentDate', 'expiryDate']);
 const MAX_LENGTH = 200;
+const SELECT_CLASS = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
 
 const STATUS_TONE: Record<PatientDocument['status'], string> = {
   UPLOADED: 'border-slate-200 bg-slate-100 text-slate-700',
@@ -48,13 +55,17 @@ export function PatientDocuments({ patientId }: { patientId: string }) {
   // ?document=<id> preselects an evidence document linked from a readiness check.
   const [params] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(params.get('document'));
+  const { hasRole } = useAuth();
+  // Mirrors DOCUMENT_UPLOAD and DOCUMENT_REVIEW on the API: practitioners only read and correct fields.
+  const isFrontDesk = hasRole('RECEPTIONIST') || hasRole('CLINIC_MANAGER');
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t.title}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-6">
+        {isFrontDesk && <UploadForm patientId={patientId} onUploaded={setSelectedId} />}
         {documents.isPending ? (
           <LoadingSkeleton />
         ) : documents.isError ? (
@@ -68,6 +79,7 @@ export function PatientDocuments({ patientId }: { patientId: string }) {
             documents={documents.data}
             selectedId={selectedId ?? documents.data[0]!.id}
             onSelect={setSelectedId}
+            canReview={isFrontDesk}
           />
         )}
       </CardContent>
@@ -79,10 +91,12 @@ function DocumentsWorkspace({
   documents,
   selectedId,
   onSelect,
+  canReview,
 }: {
   documents: PatientDocument[];
   selectedId: string;
   onSelect: (id: string) => void;
+  canReview: boolean;
 }) {
   const selected = documents.find((d) => d.id === selectedId) ?? documents[0]!;
   return (
@@ -116,7 +130,7 @@ function DocumentsWorkspace({
         ))}
       </ul>
       {/* Re-mount when another document is chosen so the form draft starts clean. */}
-      <DocumentDetail key={selected.id} document={selected} />
+      <DocumentDetail key={selected.id} document={selected} canReview={canReview} />
     </div>
   );
 }
@@ -131,7 +145,13 @@ function ExtractionBadge({ status }: { status: ExtractionStatus }) {
   );
 }
 
-function DocumentDetail({ document: d }: { document: PatientDocument }) {
+function DocumentDetail({
+  document: d,
+  canReview,
+}: {
+  document: PatientDocument;
+  canReview: boolean;
+}) {
   const metadata = useQuery({
     queryKey: ['document-metadata', d.id],
     queryFn: () => documentsApi.metadata(d.id),
@@ -140,6 +160,7 @@ function DocumentDetail({ document: d }: { document: PatientDocument }) {
   return (
     <div className="space-y-6">
       <Preview document={d} />
+      <ReviewSection document={d} canReview={canReview} />
       <section aria-labelledby={`meta-${d.id}`} className="space-y-3">
         <h3 id={`meta-${d.id}`} className="text-base font-semibold">
           {t.metadataTitle}
@@ -182,6 +203,207 @@ function Preview({ document: d }: { document: PatientDocument }) {
         {t.openFile}
       </a>
     </div>
+  );
+}
+
+/** Front-desk upload. The API judges the file type by content and enforces the size limit. */
+function UploadForm({
+  patientId,
+  onUploaded,
+}: {
+  patientId: string;
+  onUploaded: (id: string) => void;
+}) {
+  const id = useId();
+  const queryClient = useQueryClient();
+  const [file, setFile] = useState<File | null>(null);
+  const [category, setCategory] = useState<DocumentCategory | ''>('');
+  const [source, setSource] = useState<DocumentSource>('STAFF_UPLOAD');
+  const [fileInputKey, setFileInputKey] = useState(0); // remount clears the chosen file
+  const upload = useMutation({
+    mutationFn: () => documentsApi.upload(patientId, file!, category as DocumentCategory, source),
+    onSuccess: (created) => {
+      setFile(null);
+      setCategory('');
+      setFileInputKey((k) => k + 1);
+      onUploaded(created.id);
+      void queryClient.invalidateQueries({ queryKey: ['documents', { patientId }] });
+      void queryClient.invalidateQueries({ queryKey: ['readiness'] });
+    },
+  });
+  const errorCode = upload.error instanceof ApiError ? upload.error.code : undefined;
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (file && category) upload.mutate();
+  };
+
+  return (
+    <form
+      aria-label={t.upload.title}
+      onSubmit={onSubmit}
+      className="space-y-3 rounded-md border border-border p-4"
+    >
+      <h3 className="text-base font-semibold">{t.upload.title}</h3>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-file`}>{t.upload.file}</Label>
+          <Input
+            key={fileInputKey}
+            id={`${id}-file`}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png"
+            onChange={(e) => {
+              upload.reset();
+              setFile(e.target.files?.[0] ?? null);
+            }}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-category`}>{t.upload.category}</Label>
+          <select
+            id={`${id}-category`}
+            value={category}
+            onChange={(e) => setCategory(e.target.value as DocumentCategory)}
+            className={SELECT_CLASS}
+          >
+            <option value="" disabled>
+              —
+            </option>
+            {DOCUMENT_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {strings.documentCategories[c]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-source`}>{t.upload.source}</Label>
+          <select
+            id={`${id}-source`}
+            value={source}
+            onChange={(e) => setSource(e.target.value as DocumentSource)}
+            className={SELECT_CLASS}
+          >
+            {DOCUMENT_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {t.sources[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={!file || !category || upload.isPending}>
+          {upload.isPending ? t.upload.submitting : t.upload.submit}
+        </Button>
+        {upload.isSuccess && (
+          <span role="status" className="text-sm text-muted-foreground">
+            {t.upload.done}
+          </span>
+        )}
+        {upload.isError && (
+          <span role="alert" className="text-sm text-destructive">
+            {t.upload.errors[errorCode ?? ''] ?? t.upload.errors.default}
+          </span>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/** Staff decision that readiness trusts: verified clears every doubt, rejected counts as missing. */
+function ReviewSection({
+  document: d,
+  canReview,
+}: {
+  document: PatientDocument;
+  canReview: boolean;
+}) {
+  const id = useId();
+  const queryClient = useQueryClient();
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const onDone = () => {
+    setRejecting(false);
+    setReason('');
+    void queryClient.invalidateQueries({ queryKey: ['documents', { patientId: d.patientId }] });
+    void queryClient.invalidateQueries({ queryKey: ['readiness'] });
+  };
+  const verify = useMutation({ mutationFn: () => documentsApi.verify(d.id), onSuccess: onDone });
+  const reject = useMutation({
+    mutationFn: () => documentsApi.reject(d.id, reason.trim()),
+    onSuccess: onDone,
+  });
+  const pending = verify.isPending || reject.isPending;
+
+  return (
+    <section aria-labelledby={`review-${d.id}`} className="space-y-3">
+      <h3 id={`review-${d.id}`} className="text-base font-semibold">
+        {t.review.title}
+      </h3>
+      {d.status === 'REJECTED' && d.reviewNote && (
+        <p className="text-sm text-destructive">{t.review.rejectedBecause(d.reviewNote)}</p>
+      )}
+      {d.reviewedAt && (
+        <p className="text-xs text-muted-foreground">
+          {t.review.reviewedOn(formatDateTime(d.reviewedAt))}
+        </p>
+      )}
+      {canReview && (
+        <>
+          <p className="text-sm text-muted-foreground">{t.review.hint}</p>
+          {rejecting ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (reason.trim()) reject.mutate();
+              }}
+              className="space-y-2"
+            >
+              <Label htmlFor={`${id}-reason`}>{t.review.reason}</Label>
+              <Input
+                id={`${id}-reason`}
+                value={reason}
+                maxLength={500}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <div className="flex flex-wrap gap-3">
+                <Button type="submit" disabled={!reason.trim() || pending}>
+                  {t.review.confirmReject}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setRejecting(false)}>
+                  {t.review.cancel}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {d.status !== 'VERIFIED' && (
+                <Button type="button" disabled={pending} onClick={() => verify.mutate()}>
+                  {t.review.verify}
+                </Button>
+              )}
+              {d.status !== 'REJECTED' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => setRejecting(true)}
+                >
+                  {t.review.reject}
+                </Button>
+              )}
+            </div>
+          )}
+          {(verify.isError || reject.isError) && (
+            <p role="alert" className="text-sm text-destructive">
+              {t.review.error}
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

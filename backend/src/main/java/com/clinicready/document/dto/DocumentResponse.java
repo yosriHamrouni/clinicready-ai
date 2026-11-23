@@ -26,12 +26,15 @@ public record DocumentResponse(
         Instant uploadedAt,
         ExtractionStatus extractionStatus,
         ExtractionFailure extractionFailure,
-        Instant extractedAt) {
+        Instant extractedAt,
+        String reviewNote,
+        UUID reviewedBy,
+        Instant reviewedAt) {
 
     public static DocumentResponse from(Document d) {
         return new DocumentResponse(d.getId(), d.getPatientId(), d.getCategory(), d.getSource(), d.getStatus(),
                 d.getVersion(), d.getOriginalFilename(), d.getContentType(), d.getSizeBytes(), d.getSha256(),
                 d.getUploadedBy(), d.getUploadedAt(), d.getExtractionStatus(), d.getExtractionFailure(),
-                d.getExtractedAt());
+                d.getExtractedAt(), d.getReviewNote(), d.getReviewedBy(), d.getReviewedAt());
     }
 }

@@ -365,6 +365,45 @@ export const handlers = [
     HttpResponse.json(documents.filter((d) => d.patientId === params.id)),
   ),
 
+  http.post('*/patients/:id/documents', async ({ params, request }) => {
+    const form = await request.formData();
+    const file = form.get('file');
+    if (!file) return HttpResponse.json({ code: 'VALIDATION_ERROR' }, { status: 400 });
+    // shortcut: under jsdom + Node fetch the File arrives as a string, so name/type fall back; real browsers send the file.
+    const name = typeof file === 'string' ? 'upload.pdf' : file.name;
+    const category = form.get('category') as PatientDocument['category'];
+    const created: PatientDocument = {
+      id: `doc-${Date.now()}`,
+      patientId: String(params.id),
+      category,
+      source: (form.get('source') as PatientDocument['source']) ?? 'STAFF_UPLOAD',
+      status: 'UPLOADED',
+      version:
+        documents.filter((d) => d.patientId === params.id && d.category === category).length + 1,
+      originalFilename: name,
+      contentType: typeof file === 'string' ? 'application/pdf' : file.type,
+      sizeBytes: typeof file === 'string' ? file.length : file.size,
+      uploadedAt: new Date().toISOString(),
+      extractionStatus: 'PENDING',
+    };
+    documents.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  http.post('*/documents/:id/:decision', async ({ params, request }) => {
+    const doc = documents.find((d) => d.id === params.id);
+    if (!doc || (params.decision !== 'verify' && params.decision !== 'reject')) return notFound();
+    if (params.decision === 'verify') {
+      Object.assign(doc, { status: 'VERIFIED', reviewNote: null });
+    } else {
+      const { reason } = (await request.json()) as { reason?: string };
+      if (!reason?.trim()) return HttpResponse.json({ code: 'VALIDATION_ERROR' }, { status: 400 });
+      Object.assign(doc, { status: 'REJECTED', reviewNote: reason.trim() });
+    }
+    doc.reviewedAt = new Date().toISOString();
+    return HttpResponse.json(doc);
+  }),
+
   http.get('*/documents/:id/metadata', ({ params }) => {
     const id = String(params.id);
     if (!documents.some((d) => d.id === id)) return notFound();

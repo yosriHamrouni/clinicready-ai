@@ -233,6 +233,43 @@ public class DocumentService {
         return Optional.of(row);
     }
 
+    /**
+     * Staff confirm the document is the right one and readable: readiness then trusts it whatever the
+     * extraction said. Can overturn an earlier rejection. Practitioners cannot review.
+     */
+    @Transactional
+    public Document verify(UUID id) {
+        return review(id, DocumentStatus.VERIFIED, null, AuditAction.DOCUMENT_VERIFIED);
+    }
+
+    /**
+     * Staff confirm the document does not satisfy the requirement (wrong person, illegible, fake...).
+     * Readiness then reports the requirement as missing, naming the rejection.
+     *
+     * @throws InvalidRequestException blank or overlong reason
+     */
+    @Transactional
+    public Document reject(UUID id, String reason) {
+        String note = reason == null ? "" : reason.trim();
+        if (note.isEmpty() || note.length() > 500) {
+            throw new InvalidRequestException("A rejection reason of at most 500 characters is required");
+        }
+        return review(id, DocumentStatus.REJECTED, note, AuditAction.DOCUMENT_REJECTED);
+    }
+
+    private Document review(UUID id, DocumentStatus decision, String note, AuditAction action) {
+        authorization.require(Permission.DOCUMENT_REVIEW);
+        Document document = get(id);
+        DocumentStatus before = document.getStatus();
+        document.review(decision, note, currentUser.userId());
+        documents.saveAndFlush(document);
+        // The reason can name the patient, so it stays on the document and out of the audit details.
+        audit.record(action, "Document", id, Map.of("previousStatus", before.name()));
+        events.publishEvent(new PatientDocumentsChanged(document.getClinicId(), document.getPatientId()));
+        log.info("Document {} reviewed: {} -> {}", id, before, decision);
+        return document;
+    }
+
     /** Display name of whoever last edited the fields, if that user still belongs to this clinic. */
     @Transactional(readOnly = true)
     public Optional<String> editorName(DocumentMetadata metadata) {
