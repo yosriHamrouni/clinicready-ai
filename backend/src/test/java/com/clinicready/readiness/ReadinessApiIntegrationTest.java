@@ -203,7 +203,82 @@ class ReadinessApiIntegrationTest {
         }
     }
 
+    @Test
+    void staffVerifyOrRejectADocumentAndReadinessFollows() throws Exception {
+        Clinic a = clinic();
+        User manager = user(a, Role.CLINIC_MANAGER, null);
+        User reception = user(a, Role.RECEPTIONIST, null);
+        UUID ownPractitioner = practitioner(a);
+        User doctor = user(a, Role.PRACTITIONER, ownPractitioner);
+        User stranger = user(clinic(), Role.CLINIC_MANAGER, null);
+        UUID patient = patient(a);
+        UUID type = appointmentType(a);
+        mvc.perform(post("/api/v1/appointment-types/{id}/requirements", type)
+                        .contentType(MediaType.APPLICATION_JSON).with(as(manager)).content("""
+                                {"documentCategory":"CONSENT_FORM","mandatory":true,"validityDays":null,
+                                 "needsVerification":true}"""))
+                .andExpect(status().isCreated());
+        UUID appointment = createAppointment(reception, patient, ownPractitioner, type);
+        String uploaded = mvc.perform(multipart("/api/v1/patients/{id}/documents", patient)
+                        .file(new MockMultipartFile("file", "consent.pdf", "application/pdf", PDF))
+                        .param("category", "CONSENT_FORM").with(as(reception)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        UUID document = UUID.fromString(JsonPath.read(uploaded, "$.id"));
+        entityManager.flush();
+        jdbc.update("UPDATE document SET extraction_status = 'EXTRACTED', extracted_at = now() WHERE id = ?",
+                document);
+        entityManager.clear();
+        mvc.perform(post("/api/v1/appointments/{id}/readiness-checks", appointment).with(as(reception)))
+                .andExpect(jsonPath("$.checks[0].status").value("NEEDS_REVIEW"))
+                .andExpect(jsonPath("$.checks[0].reason").value(containsString("awaiting staff verification")));
+
+        // Practitioners may correct fields but not decide; another clinic does not see the document.
+        mvc.perform(post("/api/v1/documents/{id}/verify", document).with(as(doctor)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/documents/{id}/verify", document).with(as(stranger)))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(post("/api/v1/documents/{id}/verify", document).with(as(reception)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("VERIFIED"))
+                .andExpect(jsonPath("$.reviewedBy").value(reception.id.toString()))
+                .andExpect(jsonPath("$.reviewedAt").isNotEmpty())
+                .andExpect(jsonPath("$.reviewNote").doesNotExist());
+        readiness(reception, appointment).andExpect(jsonPath("$.checks[0].status").value("PRESENT"));
+
+        // A rejection needs a reason; it then counts as missing and the reason is kept on the document.
+        reject(reception, document, "{\"reason\":\"  \"}").andExpect(status().isBadRequest());
+        reject(reception, document, "{}").andExpect(status().isBadRequest());
+        reject(reception, document, "{\"reason\":\"" + "x".repeat(501) + "\"}").andExpect(status().isBadRequest());
+        reject(doctor, document, "{\"reason\":\"Illisible\"}").andExpect(status().isForbidden());
+        reject(manager, document, "{\"reason\":\"  Autre patient  \"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.reviewNote").value("Autre patient"))
+                .andExpect(jsonPath("$.reviewedBy").value(manager.id.toString()));
+        readiness(reception, appointment)
+                .andExpect(jsonPath("$.status").value("INCOMPLETE"))
+                .andExpect(jsonPath("$.checks[0].status").value("MISSING"))
+                .andExpect(jsonPath("$.checks[0].reason").value(containsString("rejected by staff")));
+
+        // Audited with the previous status, never with the reason.
+        entityManager.flush();
+        Integer verified = jdbc.queryForObject("""
+                SELECT count(*) FROM audit_event WHERE entity_id = ? AND action = 'DOCUMENT_VERIFIED'
+                  AND actor_user_id = ?""", Integer.class, document, reception.id);
+        String rejectedSummary = jdbc.queryForObject("""
+                SELECT change_summary::text FROM audit_event WHERE entity_id = ? AND action = 'DOCUMENT_REJECTED'""",
+                String.class, document);
+        org.assertj.core.api.Assertions.assertThat(verified).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(rejectedSummary).contains("VERIFIED").doesNotContain("Autre");
+    }
+
     // ---- helpers ----------------------------------------------------------------------------
+
+    private ResultActions reject(User as, UUID document, String json) throws Exception {
+        return mvc.perform(post("/api/v1/documents/{id}/reject", document).with(as(as))
+                .contentType(MediaType.APPLICATION_JSON).content(json));
+    }
 
     private ResultActions readiness(User as, UUID appointment) throws Exception {
         return mvc.perform(get("/api/v1/appointments/{id}/readiness", appointment).with(as(as)));

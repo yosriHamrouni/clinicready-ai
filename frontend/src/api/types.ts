@@ -184,7 +184,17 @@ export interface PatientDocument {
   sizeBytes: number;
   uploadedAt: string;
   extractionStatus: ExtractionStatus;
+  /** Rejection reason; null unless the status is REJECTED. */
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
 }
+
+export const DOCUMENT_SOURCES: DocumentSource[] = [
+  'STAFF_UPLOAD',
+  'EMAIL',
+  'SCAN',
+  'PATIENT_SUBMISSION',
+];
 
 /** Editable fields of a document, as named by the API. */
 export const METADATA_FIELDS = [

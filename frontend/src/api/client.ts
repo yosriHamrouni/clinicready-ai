@@ -67,7 +67,9 @@ async function request<T>(
   signal?.addEventListener('abort', () => controller.abort());
 
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // FormData (file upload): the browser sets the multipart Content-Type with its boundary.
+  const isForm = body instanceof FormData;
+  if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   let res: Response;
@@ -75,7 +77,7 @@ async function request<T>(
     res = await fetch(buildUrl(path), {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: isForm ? body : body !== undefined ? JSON.stringify(body) : undefined,
       credentials: 'include', // Option A: httpOnly session cookie
       signal: controller.signal,
     });

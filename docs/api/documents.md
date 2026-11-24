@@ -10,6 +10,7 @@ A document is a PDF, JPEG or PNG attached to a patient. The file is stored **out
 | --- | --- | --- | --- |
 | Upload | yes | yes | no (403) |
 | List / read metadata / download | yes | yes | only documents of patients they have an appointment with |
+| Verify / reject | yes | yes | no (403) |
 
 A document or patient of another clinic, or one the user may not see, is reported as `404 NOT_FOUND`.
 
@@ -31,13 +32,17 @@ A document or patient of another clinic, or one the user may not see, is reporte
   "uploadedAt": "2026-11-11T19:24:04.949Z",
   "extractionStatus": "EXTRACTED",
   "extractionFailure": null,
-  "extractedAt": "2026-11-11T19:24:05.312Z"
+  "extractedAt": "2026-11-11T19:24:05.312Z",
+  "reviewNote": null,
+  "reviewedBy": null,
+  "reviewedAt": null
 }
 ```
 
 - `category`: `ID_DOCUMENT`, `INSURANCE_CARD`, `PRESCRIPTION`, `REFERRAL_LETTER`, `CONSENT_FORM`, `LAB_RESULT`, `IMAGING_REPORT`, `OTHER`.
 - `source`: `STAFF_UPLOAD`, `EMAIL`, `SCAN`, `PATIENT_SUBMISSION`.
-- `status`: `UPLOADED` on creation; later `NEEDS_REVIEW`, `VERIFIED`, `REJECTED` (set by upcoming features).
+- `status`: `UPLOADED` on creation; `NEEDS_REVIEW` when AI extraction flags it; `VERIFIED` or `REJECTED` by staff (see [Verify / reject](#post-documentsidverify-and-post-documentsidreject)).
+- `reviewNote`, `reviewedBy`, `reviewedAt`: the last staff decision. `reviewNote` is the rejection reason, `null` unless `REJECTED`.
 - `version`: starts at 1 per patient and category; each new upload of the same category is the next version. Earlier versions are kept.
 - `contentType` is determined from the file's bytes, not from the client.
 - `sha256` is the lowercase hex SHA-256 of the stored bytes.
@@ -110,6 +115,15 @@ Allowed for receptionists, clinic managers and practitioners (practitioners only
 | 400 | `VALIDATION_ERROR` | Missing `fields`, unknown field name, value over 200 characters, or a date that is not a real `YYYY-MM-DD` date. Nothing is saved. |
 | 401 | `UNAUTHENTICATED` | No or invalid token. |
 | 404 | `NOT_FOUND` | Document does not exist, belongs to another clinic, or is not visible to the user. |
+
+## `POST /documents/{id}/verify` and `POST /documents/{id}/reject`
+
+Staff decision on a document (YOS-46). Receptionist and manager only; a practitioner gets `403 FORBIDDEN`.
+
+- `verify`: no body. Sets `VERIFIED`; readiness then trusts the document whatever the extraction said (it can still be `EXPIRED`).
+- `reject`: body `{"reason": "Ordonnance d'un autre patient"}`, required, 1 to 500 characters after trimming, else `400 VALIDATION_ERROR`. Sets `REJECTED`; readiness reports the requirement as `MISSING` with the rejection as evidence.
+- Either can overturn the other. Returns the document object. Readiness is recalculated for the patient's appointments.
+- Audit: `DOCUMENT_VERIFIED` / `DOCUMENT_REJECTED` with the previous status. The reason is kept on the document only, never in the audit log.
 
 ## Text extraction
 

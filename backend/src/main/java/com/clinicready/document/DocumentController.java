@@ -31,6 +31,7 @@ import com.clinicready.document.dto.DocumentResponse;
 import com.clinicready.document.dto.DocumentMetadataResponse;
 import com.clinicready.document.dto.MetadataPatch;
 import com.clinicready.document.dto.NewDocument;
+import com.clinicready.document.dto.RejectDocument;
 
 /**
  * Upload and read documents. Files are served only here, after authentication, the role check and
@@ -79,6 +80,16 @@ class DocumentController {
     @PatchMapping("/documents/{id}/metadata")
     DocumentMetadataResponse updateMetadata(@PathVariable UUID id, @Valid @RequestBody MetadataPatch body) {
         return metadataResponse(id, documents.updateMetadata(id, body.fields()));
+    }
+
+    @PostMapping("/documents/{id}/verify")
+    DocumentResponse verify(@PathVariable UUID id) {
+        return DocumentResponse.from(documents.verify(id));
+    }
+
+    @PostMapping("/documents/{id}/reject")
+    DocumentResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectDocument body) {
+        return DocumentResponse.from(documents.reject(id, body.reason()));
     }
 
     private DocumentMetadataResponse metadataResponse(UUID id, Optional<DocumentMetadata> metadata) {

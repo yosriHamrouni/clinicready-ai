@@ -17,6 +17,8 @@ public enum Permission {
     DOCUMENT_UPLOAD,
     /** Scoped for practitioners: administrative fields only. */
     DOCUMENT_METADATA_EDIT,
+    /** Verify or reject a document (staff decision that readiness trusts). */
+    DOCUMENT_REVIEW,
     /** Scoped for practitioners: their own appointments. */
     AGENT_RUN,
     FOLLOWUP_APPROVE,

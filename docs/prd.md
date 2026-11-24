@@ -44,6 +44,7 @@ From the full PRD ("Users and permissions"). Every user is scoped to one clinic:
 | `DOCUMENT_READ` | Yes | Own patients' | Yes |
 | `DOCUMENT_UPLOAD` | Yes | No | Yes |
 | `DOCUMENT_METADATA_EDIT` | Yes | Administrative fields only | Yes |
+| `DOCUMENT_REVIEW` (verify / reject a document) | Yes | No | Yes |
 | `AGENT_RUN` | Yes | Own appointments only | Yes |
 | `FOLLOWUP_APPROVE` (approve / reject / edit) | Yes | No | Yes |
 | `REQUIREMENT_RULES_MANAGE` (appointment types and rules) | No | No | Yes |
@@ -52,7 +53,7 @@ From the full PRD ("Users and permissions"). Every user is scoped to one clinic:
 | `AUDIT_READ` (audit log, readiness stats) | Own actions | No | All |
 | `PATIENT_WRITE`, `APPOINTMENT_WRITE` | Yes | No | Yes |
 
-The last row is not in the full PRD: front-desk data entry is given to receptionists and managers. Rows with a narrower scope ("own …") are applied by the owning service on top of the permission.
+`DOCUMENT_REVIEW` (YOS-46) and the last row are not in the full PRD: front-desk data entry is given to receptionists and managers. Rows with a narrower scope ("own …") are applied by the owning service on top of the permission.
 
 ## Out of scope (MVP)
 

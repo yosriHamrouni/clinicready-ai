@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { File as NodeFile } from 'node:buffer';
 import { http, HttpResponse } from 'msw';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { Providers } from '../app/providers';
@@ -115,5 +116,92 @@ describe('patient file: documents', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(t.saveError);
     expect(screen.getByLabelText(t.fields.documentNumber)).toHaveValue('A-123');
     expect(screen.getByRole('button', { name: t.save })).toBeEnabled();
+  });
+});
+
+describe('patient file: upload and review', () => {
+  it('uploads a document with its category and source, then selects it', async () => {
+    renderAt('/patients/patient-002');
+    const user = userEvent.setup();
+
+    const form = await screen.findByRole('form', { name: t.upload.title });
+    const submit = within(form).getByRole('button', { name: t.upload.submit });
+    expect(submit).toBeDisabled();
+    await user.upload(
+      within(form).getByLabelText(t.upload.file),
+      // jsdom's File stalls Node's fetch body; Node's own File goes through (as a plain field).
+      new NodeFile(['%PDF-1.4'], 'assurance.pdf', { type: 'application/pdf' }) as unknown as File,
+    );
+    await user.selectOptions(within(form).getByLabelText(t.upload.category), 'INSURANCE_CARD');
+    await user.selectOptions(within(form).getByLabelText(t.upload.source), 'EMAIL');
+    await user.click(submit);
+
+    expect(await within(form).findByRole('status')).toHaveTextContent(t.upload.done);
+    const list = await screen.findByRole('list', { name: t.list });
+    // jsdom cannot send the file bytes through Node's fetch, so the mock names it upload.pdf.
+    expect(await screen.findByTitle(`${t.preview} : upload.pdf`)).toBeInTheDocument();
+    // The mock API stored what the form sent.
+    expect(within(list).getByText(/Carte d'assurance/)).toBeInTheDocument();
+  });
+
+  it('explains an upload the API refuses', async () => {
+    server.use(
+      http.post('*/patients/:id/documents', () =>
+        HttpResponse.json({ code: 'FILE_TOO_LARGE', message: 'too big' }, { status: 413 }),
+      ),
+    );
+    renderAt('/patients/patient-002');
+    const user = userEvent.setup();
+
+    const form = await screen.findByRole('form', { name: t.upload.title });
+    await user.upload(
+      within(form).getByLabelText(t.upload.file),
+      new File(['x'], 'big.pdf', { type: 'application/pdf' }),
+    );
+    await user.selectOptions(within(form).getByLabelText(t.upload.category), 'OTHER');
+    await user.click(within(form).getByRole('button', { name: t.upload.submit }));
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent(
+      t.upload.errors.FILE_TOO_LARGE!,
+    );
+  });
+
+  it('verifies a document, then rejects it with a reason', async () => {
+    renderAt('/patients/patient-001');
+    const user = userEvent.setup();
+    const list = await screen.findByRole('list', { name: t.list });
+    expect(within(list).getByText(t.statuses.NEEDS_REVIEW)).toBeInTheDocument();
+
+    await user.click(await screen.findByRole('button', { name: t.review.verify }));
+    expect(await within(list).findByText(t.statuses.VERIFIED)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.review.verify })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: t.review.reject }));
+    const confirm = screen.getByRole('button', { name: t.review.confirmReject });
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByLabelText(t.review.reason), 'Ordonnance d’un autre patient');
+    await user.click(confirm);
+
+    expect(await within(list).findByText(t.statuses.REJECTED)).toBeInTheDocument();
+    expect(
+      await screen.findByText(t.review.rejectedBecause('Ordonnance d’un autre patient')),
+    ).toBeInTheDocument();
+  });
+
+  it('gives a practitioner neither the upload form nor the review buttons', async () => {
+    server.use(
+      http.get('*/auth/me', () => HttpResponse.json({ ...MOCK_USER, roles: ['PRACTITIONER'] })),
+    );
+    const router = createMemoryRouter(routes, { initialEntries: ['/patients/patient-001'] });
+    render(
+      <Providers>
+        <RouterProvider router={router} />
+      </Providers>,
+    );
+
+    expect(await screen.findByRole('list', { name: t.list })).toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: t.upload.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.review.verify })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t.review.reject })).not.toBeInTheDocument();
   });
 });
